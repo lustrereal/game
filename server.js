@@ -11,6 +11,9 @@ const io = require('socket.io')(http, {
 
 app.use(express.static(__dirname)); // Serve client files
 
+const WORLD_WIDTH = 3000;
+const WORLD_HEIGHT = 2000;
+
 const players = {}; // {id: {x, y, color, name}}
 
 io.on('connection', (socket) => {
@@ -26,8 +29,8 @@ io.on('connection', (socket) => {
     if (!data.name || data.name.trim().length === 0) data.name = 'Anonymous';
     data.name = data.name.trim().substring(0, 16);
     players[socket.id] = {
-      x: Math.floor(Math.random() * 800) + 50,
-      y: Math.floor(Math.random() * 600) + 50,
+      x: Math.floor(Math.random() * (WORLD_WIDTH - 100)) + 50,
+      y: Math.floor(Math.random() * (WORLD_HEIGHT - 100)) + 50,
       color: data.color,
       name: data.name
     };
@@ -36,9 +39,11 @@ io.on('connection', (socket) => {
 
   socket.on('playerMovement', (movementData) => {
     if (players[socket.id]) {
-      players[socket.id].x = movementData.x;
-      players[socket.id].y = movementData.y;
-      socket.broadcast.emit('playerMoved', { id: socket.id, x: movementData.x, y: movementData.y });
+      const newX = Math.max(0, Math.min(WORLD_WIDTH - 50, movementData.x));
+      const newY = Math.max(0, Math.min(WORLD_HEIGHT - 50, movementData.y));
+      players[socket.id].x = newX;
+      players[socket.id].y = newY;
+      socket.broadcast.emit('playerMoved', { id: socket.id, x: newX, y: newY });
     }
   });
 
