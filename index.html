@@ -1,3 +1,4 @@
+<!-- Updated index.html (full file - copy-paste replace) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,26 +6,114 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multiplayer Square Game</title>
   <style>
-    body { margin: 0; background: #f0f0f0; font-family: Arial, sans-serif; }
-    #menu { text-align: center; padding: 50px; }
-    #game { display: none; }
-    canvas { background: green; border: 1px solid #000; display: block; margin: 0 auto; }
+    body { 
+      margin: 0; 
+      background: #f0f0f0; 
+      font-family: Arial, sans-serif; 
+      overflow: hidden;
+    }
+    #menu { 
+      text-align: center; 
+      padding: 50px; 
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      padding: 40px;
+    }
+    #game { 
+      display: none; 
+      height: 100vh;
+    }
+    canvas { 
+      background: #228B22; /* Green ground */
+      border: 1px solid #000; 
+      display: block; 
+      margin: 0 auto; 
+      cursor: crosshair;
+    }
+    #chat { 
+      position: fixed; 
+      top: 10px; 
+      left: 10px; 
+      width: 300px; 
+      background: rgba(0,0,0,0.8); 
+      color: white; 
+      border-radius: 10px; 
+      padding: 10px; 
+      font-size: 14px; 
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #messages { 
+      height: 140px; 
+      overflow-y: auto; 
+      margin: 0 0 10px 0; 
+      padding: 0; 
+      list-style: none; 
+    }
+    #messages li { 
+      margin: 3px 0; 
+      word-wrap: break-word;
+      font-size: 13px;
+    }
+    #chatInput { 
+      width: 75%; 
+      padding: 6px; 
+      border: none; 
+      border-radius: 5px; 
+      background: rgba(255,255,255,0.9);
+    }
+    #sendBtn { 
+      width: 22%; 
+      padding: 6px; 
+      background: #4CAF50; 
+      color: white; 
+      border: none; 
+      border-radius: 5px; 
+      cursor: pointer; 
+      font-weight: bold;
+    }
+    #sendBtn:hover { background: #45a049; }
+    #nameInput {
+      display: block;
+      margin: 20px auto;
+      padding: 10px;
+      width: 200px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
   <div id="menu">
-    <h1>Choose Your Color</h1>
+    <h1>Multiplayer Square Game</h1>
+    <input id="nameInput" placeholder="Your name (optional)" maxlength="16">
+    <br>
     <select id="colorSelect">
       <option value="red">Red</option>
-      <option value="blue">Blue</option>
-      <option value="green">Green</option>
+      <option value="blue" selected>Blue</option>
+      <option value="lime">Lime</option>
       <option value="yellow">Yellow</option>
       <option value="purple">Purple</option>
+      <option value="orange">Orange</option>
+      <option value="cyan">Cyan</option>
+      <option value="pink">Pink</option>
     </select>
-    <button id="playButton">Play</button>
+    <br><br>
+    <button id="playButton" style="padding:12px 24px; font-size:18px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">Play</button>
   </div>
   <div id="game">
     <canvas id="canvas" width="900" height="700"></canvas>
+    <div id="chat">
+      <ul id="messages"></ul>
+      <input id="chatInput" placeholder="Say something..." maxlength="100">
+      <button id="sendBtn">Send</button>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
