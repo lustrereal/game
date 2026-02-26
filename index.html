@@ -127,9 +127,8 @@
       border-color: #ff0;
       box-shadow: 0 0 8px #ff0;
     }
-    #healthBarContainer {
+    #healthBarContainer, #staminaBarContainer {
       position: fixed;
-      bottom: 20px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0,0,0,0.6);
@@ -138,6 +137,25 @@
       color: white;
       font-weight: bold;
       z-index: 100;
+      text-align: center;
+    }
+    #healthBarContainer {
+      bottom: 70px;
+    }
+    #staminaBarContainer {
+      bottom: 20px;
+    }
+    .bar-outer {
+      width: 220px;
+      height: 20px;
+      background: #333;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .bar-inner {
+      height: 100%;
+      transition: width 0.3s, background 0.3s;
     }
   </style>
 </head>
@@ -177,8 +195,16 @@
 
     <div id="healthBarContainer">
       <div id="healthText">Health: 100/100</div>
-      <div style="width:220px; height:20px; background:#333; border-radius:6px; overflow:hidden; margin-top:4px;">
-        <div id="healthBar" style="width:100%; height:100%; background:linear-gradient(to right, #0f0, #0f0); transition: width 0.3s, background 0.3s;"></div>
+      <div class="bar-outer">
+        <div id="healthBar" class="bar-inner" style="width:100%; background:linear-gradient(to right, #0f0, #0f0);"></div>
+      </div>
+    </div>
+
+    <!-- Stamina bar container - will be styled/positioned via JS if needed, but static here -->
+    <div id="staminaBarContainer">
+      <div id="staminaText">Stamina: 100/100</div>
+      <div class="bar-outer">
+        <div id="staminaBar" class="bar-inner" style="width:100%; background:linear-gradient(to right, #3498db, #3498db);"></div>
       </div>
     </div>
   </div>
