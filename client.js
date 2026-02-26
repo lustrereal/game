@@ -15,6 +15,27 @@ const slotsDiv = document.getElementById('slots');
 const healthText = document.getElementById('healthText');
 const healthBar = document.getElementById('healthBar');
 
+// New stamina elements (add to index.html later)
+let staminaText, staminaBar;
+function initStaminaUI() {
+  const container = document.createElement('div');
+  container.style.cssText = `
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); padding: 6px 12px; border-radius: 8px;
+    color: white; font-weight: bold; z-index: 100;
+  `;
+  staminaText = document.createElement('div');
+  staminaText.textContent = 'Stamina: 100/100';
+  staminaBarContainer = document.createElement('div');
+  staminaBarContainer.style.cssText = 'width:220px; height:16px; background:#333; border-radius:6px; overflow:hidden; margin-top:4px;';
+  staminaBar = document.createElement('div');
+  staminaBar.style.cssText = 'width:100%; height:100%; background:linear-gradient(to right, #3498db, #3498db); transition: width 0.3s;';
+  staminaBarContainer.appendChild(staminaBar);
+  container.appendChild(staminaText);
+  container.appendChild(staminaBarContainer);
+  document.getElementById('game').appendChild(container);
+}
+
 const WORLD_WIDTH = 3000;
 const WORLD_HEIGHT = 2000;
 
@@ -24,8 +45,16 @@ const projectiles = [];
 let myId = null;
 let cameraX = 0;
 let cameraY = 0;
+
 const movement = { up: false, down: false, left: false, right: false };
-const speed = 5;
+const baseSpeed = 5;
+const sprintSpeed = 9;
+let sprinting = false;
+let stamina = 100;
+const maxStamina = 100;
+const staminaDrainRate = 20;    // per second while sprinting
+const staminaRegenRate = 12;    // per second when not sprinting
+
 let mouseX = 0;
 let mouseY = 0;
 let lastDirection = { x: 1, y: 0 };
@@ -48,12 +77,16 @@ playButton.addEventListener('click', () => {
   const name = nameInput.value.trim() || 'Anonymous';
   menu.style.display = 'none';
   gameDiv.style.display = 'block';
+  initStaminaUI(); // Create stamina bar UI
   socket.emit('join', { color, name });
 });
 
 sendBtn.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', e => {
-  if (e.key === 'Enter') sendChatMessage();
+  if (e.key === 'Enter') {
+    sendChatMessage();
+    e.preventDefault(); // Prevent any weird behavior
+  }
 });
 
 function sendChatMessage() {
@@ -62,6 +95,7 @@ function sendChatMessage() {
     socket.emit('chatMessage', { message });
     chatInput.value = '';
   }
+  chatInput.blur(); // Optional: unfocus after send to allow movement keys again
 }
 
 canvas.addEventListener('mousemove', e => {
@@ -88,8 +122,10 @@ document.addEventListener('keydown', e => {
     case 's': movement.down = true; break;
     case 'a': movement.left = true; break;
     case 'd': movement.right = true; break;
+    case 'shift':
+      sprinting = true;
+      break;
     case 'e':
-      // Attempt to pick up the nearest bow
       if (players[myId]) {
         const p = players[myId];
         let closestBow = null;
@@ -124,6 +160,9 @@ document.addEventListener('keyup', e => {
     case 's': movement.down = false; break;
     case 'a': movement.left = false; break;
     case 'd': movement.right = false; break;
+    case 'shift':
+      sprinting = false;
+      break;
   }
 });
 
@@ -156,14 +195,10 @@ function drawBowIcon(ctx, cx, cy, size) {
   ctx.translate(cx, cy);
   ctx.scale(size / 64, size / 64);
 
-  // Wood body
   ctx.fillStyle = '#8B4513';
   ctx.fillRect(-6, -24, 12, 48);
-
-  // Limbs
   ctx.fillRect(-20, -8, 40, 16);
 
-  // String
   ctx.strokeStyle = '#444';
   ctx.lineWidth = 4;
   ctx.beginPath();
@@ -171,7 +206,6 @@ function drawBowIcon(ctx, cx, cy, size) {
   ctx.lineTo(16, 12);
   ctx.stroke();
 
-  // Arrow rest / tip
   ctx.fillStyle = '#ccc';
   ctx.fillRect(-4, -28, 8, 8);
 
@@ -218,7 +252,6 @@ function drawBubble(x, y, text, color) {
   ctx.lineWidth = 2;
   ctx.strokeRect(x - w/2, by, w, h);
 
-  // Tail
   ctx.beginPath();
   ctx.moveTo(x - 6, by + h);
   ctx.lineTo(x + 6, by + h);
@@ -233,14 +266,28 @@ function drawBubble(x, y, text, color) {
   ctx.restore();
 }
 
-function gameLoop() {
-  // Update my position & direction
+let lastTime = performance.now();
+
+function gameLoop(time = performance.now()) {
+  const dt = (time - lastTime) / 1000; // delta time in seconds
+  lastTime = time;
+
+  // Stamina logic
+  if (sprinting && stamina > 0) {
+    stamina = Math.max(0, stamina - staminaDrainRate * dt);
+  } else if (!sprinting) {
+    stamina = Math.min(maxStamina, stamina + staminaRegenRate * dt);
+  }
+
+  // Update movement speed
+  const currentSpeed = sprinting && stamina > 0 ? sprintSpeed : baseSpeed;
+
   if (players[myId]) {
     let changed = false;
-    if (movement.up)    { players[myId].y -= speed; changed = true; }
-    if (movement.down)  { players[myId].y += speed; changed = true; }
-    if (movement.left)  { players[myId].x -= speed; changed = true; }
-    if (movement.right) { players[myId].x += speed; changed = true; }
+    if (movement.up)    { players[myId].y -= currentSpeed; changed = true; }
+    if (movement.down)  { players[myId].y += currentSpeed; changed = true; }
+    if (movement.left)  { players[myId].x -= currentSpeed; changed = true; }
+    if (movement.right) { players[myId].x += currentSpeed; changed = true; }
 
     players[myId].x = Math.max(0, Math.min(WORLD_WIDTH - 50, players[myId].x));
     players[myId].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, players[myId].y));
@@ -257,7 +304,7 @@ function gameLoop() {
     }
   }
 
-  // Camera follow
+  // Camera
   if (players[myId]) {
     cameraX = players[myId].x + 25 - canvas.width / 2;
     cameraY = players[myId].y + 25 - canvas.height / 2;
@@ -269,7 +316,7 @@ function gameLoop() {
   ctx.save();
   ctx.translate(-cameraX, -cameraY);
 
-  // Draw players
+  // Players
   Object.values(players).forEach(p => {
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, 50, 50);
@@ -293,12 +340,12 @@ function gameLoop() {
     }
   });
 
-  // Draw bows on ground
+  // Bows
   bows.forEach(b => {
     drawBowIcon(ctx, b.x, b.y, 48);
   });
 
-  // Highlight nearby bows (visual feedback for pickup)
+  // Highlight nearby bows
   if (players[myId]) {
     const p = players[myId];
     bows.forEach(bow => {
@@ -315,7 +362,7 @@ function gameLoop() {
     });
   }
 
-  // Draw projectiles
+  // Projectiles
   projectiles.forEach(p => {
     ctx.fillStyle = '#ff0000';
     ctx.fillRect(p.x - 10, p.y - 5, 20, 10);
@@ -325,7 +372,7 @@ function gameLoop() {
 
   ctx.restore();
 
-  // Minimap
+  // Minimap (unchanged)
   mctx.clearRect(0, 0, 200, 150);
   mctx.fillStyle = '#228B22';
   mctx.fillRect(0, 0, 200, 150);
@@ -364,11 +411,20 @@ function gameLoop() {
   // UI updates
   if (players[myId]) {
     healthText.textContent = `Health: ${players[myId].health}/100`;
-    const pct = players[myId].health;
-    healthBar.style.width = pct + '%';
-    healthBar.style.background = pct > 50 ? 'linear-gradient(to right, #0f0, #0f0)' :
-                                 pct > 20 ? 'linear-gradient(to right, #ff0, #ff0)' :
+    const hpct = players[myId].health;
+    healthBar.style.width = hpct + '%';
+    healthBar.style.background = hpct > 50 ? 'linear-gradient(to right, #0f0, #0f0)' :
+                                 hpct > 20 ? 'linear-gradient(to right, #ff0, #ff0)' :
                                  'linear-gradient(to right, #f00, #f00)';
+
+    // Stamina UI
+    staminaText.textContent = `Stamina: ${Math.round(stamina)}/${maxStamina}`;
+    const spct = (stamina / maxStamina) * 100;
+    staminaBar.style.width = spct + '%';
+    staminaBar.style.background = spct > 30 ? 'linear-gradient(to right, #3498db, #3498db)' :
+                                  spct > 10 ? 'linear-gradient(to right, #f39c12, #f39c12)' :
+                                  'linear-gradient(to right, #e74c3c, #e74c3c)';
+
     updateInventoryUI();
   }
 
