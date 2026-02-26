@@ -1,4 +1,3 @@
-<!-- Updated index.html (full file - copy-paste replace) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +21,6 @@
       background: white;
       border-radius: 10px;
       box-shadow: 0 0 20px rgba(0,0,0,0.3);
-      padding: 40px;
       z-index: 200;
     }
     #game { 
@@ -31,7 +29,7 @@
       position: relative;
     }
     #canvas { 
-      background: #228B22; /* Green ground */
+      background: #228B22;
       border: 2px solid #333; 
       display: block; 
       margin: 0 auto; 
@@ -93,7 +91,7 @@
     #minimap {
       position: fixed;
       top: 10px;
-      right: 10px;
+      right: 220px;
       width: 200px;
       height: 150px;
       border: 2px solid #333;
@@ -101,6 +99,45 @@
       background: #111;
       z-index: 100;
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #inventory {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 8px;
+      padding: 10px;
+      color: white;
+      font-size: 14px;
+      pointer-events: all;
+      z-index: 100;
+    }
+    .slot {
+      width: 48px;
+      height: 48px;
+      background: #555;
+      border: 2px solid #888;
+      margin: 4px;
+      display: inline-block;
+      position: relative;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .slot.selected {
+      border-color: #ff0;
+      box-shadow: 0 0 8px #ff0;
+    }
+    #healthBarContainer {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      padding: 8px 16px;
+      border-radius: 8px;
+      color: white;
+      font-weight: bold;
+      z-index: 100;
     }
   </style>
 </head>
@@ -122,13 +159,27 @@
     <br><br>
     <button id="playButton" style="padding:12px 24px; font-size:18px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">Play</button>
   </div>
+
   <div id="game">
     <canvas id="canvas" width="900" height="700"></canvas>
     <canvas id="minimap" width="200" height="150"></canvas>
+
     <div id="chat">
       <ul id="messages"></ul>
       <input id="chatInput" placeholder="Say something..." maxlength="100">
       <button id="sendBtn">Send</button>
+    </div>
+
+    <div id="inventory">
+      <div>Inventory</div>
+      <div id="slots"></div>
+    </div>
+
+    <div id="healthBarContainer">
+      <div id="healthText">Health: 100/100</div>
+      <div style="width:220px; height:20px; background:#333; border-radius:6px; overflow:hidden; margin-top:4px;">
+        <div id="healthBar" style="width:100%; height:100%; background:linear-gradient(to right, #0f0, #0f0); transition: width 0.3s, background 0.3s;"></div>
+      </div>
     </div>
   </div>
 
