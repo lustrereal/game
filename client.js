@@ -2,6 +2,8 @@
 const socket = io();
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const minimap = document.getElementById('minimap');
+const mctx = minimap.getContext('2d');
 const menu = document.getElementById('menu');
 const gameDiv = document.getElementById('game');
 const nameInput = document.getElementById('nameInput');
@@ -11,8 +13,13 @@ const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
 const messagesUl = document.getElementById('messages');
 
+const WORLD_WIDTH = 3000;
+const WORLD_HEIGHT = 2000;
+
 const players = {};
 let myId = null;
+let cameraX = 0;
+let cameraY = 0;
 const movement = { up: false, down: false, left: false, right: false };
 const speed = 5;
 
@@ -61,8 +68,8 @@ document.addEventListener('keydown', (e) => {
     case 'a': movement.left = true; break;
     case 'd': movement.right = true; break;
     case 'enter':
-      // Focus chat if not focused
       if (document.activeElement !== chatInput) {
+        e.preventDefault();
         chatInput.focus();
       }
       break;
@@ -121,48 +128,65 @@ socket.on('playerDisconnected', (id) => {
   delete players[id];
 });
 
-// Draw speech bubble
+// Draw speech bubble (world coordinates)
 function drawBubble(x, y, text, color) {
   ctx.save();
-  ctx.font = 'bold 14px Arial';
+  ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const metrics = ctx.measureText(text);
-  const padding = 12;
-  const bubbleWidth = Math.max(60, Math.min(220, metrics.width + 2 * padding));
-  const bubbleHeight = 32;
-  const bubbleY = y - bubbleHeight - 8;
+
+  let displayText = text;
+  const padding = 10;
+  const maxWidth = 200;
+  while (ctx.measureText(displayText).width > maxWidth - 2 * padding && displayText.length > 0) {
+    displayText = displayText.slice(0, -1);
+  }
+  if (displayText.length < text.length) displayText += '...';
+
+  const metrics = ctx.measureText(displayText);
+  const bubbleWidth = Math.max(50, metrics.width + 2 * padding);
+  const bubbleHeight = 28;
+  const bubbleY = y - bubbleHeight - 10;
 
   // Bubble background
   ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
   ctx.fillRect(x - bubbleWidth / 2, bubbleY, bubbleWidth, bubbleHeight);
 
   // Border
-  ctx.strokeStyle = '#ddd';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
   ctx.strokeRect(x - bubbleWidth / 2, bubbleY, bubbleWidth, bubbleHeight);
 
-  // Tail (triangle pointing down)
+  // Tail
   ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
   ctx.beginPath();
-  ctx.moveTo(x - 8, y - 8);
-  ctx.lineTo(x + 8, y - 8);
-  ctx.lineTo(x, y);
+  ctx.moveTo(x - 6, bubbleY + bubbleHeight);
+  ctx.lineTo(x + 6, bubbleY + bubbleHeight);
+  ctx.lineTo(x, y - 8);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
   ctx.stroke();
 
   // Text
-  ctx.fillStyle = '#333';
-  ctx.fillText(text, x, bubbleY + bubbleHeight / 2);
+  ctx.fillStyle = '#222';
+  ctx.fillText(displayText, x, bubbleY + bubbleHeight / 2);
+
   ctx.restore();
 }
 
 // Game loop
 function gameLoop() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Update camera
+  if (players[myId]) {
+    cameraX = players[myId].x + 25 - canvas.width / 2;
+    cameraY = players[myId].y + 25 - canvas.height / 2;
+    cameraX = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, cameraX));
+    cameraY = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, cameraY));
+  }
 
-  // Update my position
+  // Update my position (prediction)
   if (players[myId]) {
     let changed = false;
     if (movement.up) { players[myId].y -= speed; changed = true; }
@@ -170,16 +194,23 @@ function gameLoop() {
     if (movement.left) { players[myId].x -= speed; changed = true; }
     if (movement.right) { players[myId].x += speed; changed = true; }
 
-    // Bounds
-    players[myId].x = Math.max(0, Math.min(canvas.width - 50, players[myId].x));
-    players[myId].y = Math.max(0, Math.min(canvas.height - 50, players[myId].y));
+    // Clamp to world
+    players[myId].x = Math.max(0, Math.min(WORLD_WIDTH - 50, players[myId].x));
+    players[myId].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, players[myId].y));
 
     if (changed) {
       socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
     }
   }
 
-  // Draw players + bubbles
+  // Main canvas: clear viewport
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Translate for camera
+  ctx.save();
+  ctx.translate(-cameraX, -cameraY);
+
+  // Draw all players + bubbles
   Object.values(players).forEach(player => {
     // Square
     ctx.fillStyle = player.color;
@@ -194,8 +225,51 @@ function gameLoop() {
     }
   });
 
+  ctx.restore();
+
+  // Minimap
+  mctx.clearRect(0, 0, 200, 150);
+  mctx.fillStyle = '#228B22';
+  mctx.fillRect(0, 0, 200, 150);
+
+  const scaleX = 200 / WORLD_WIDTH;
+  const scaleY = 150 / WORLD_HEIGHT;
+
+  // Players as dots
+  Object.values(players).forEach(player => {
+    const mx = player.x * scaleX;
+    const my = player.y * scaleY;
+    mctx.fillStyle = player.color;
+    mctx.beginPath();
+    mctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+    mctx.fill();
+  });
+
+  // Self dot (highlighted)
+  if (players[myId]) {
+    const mx = players[myId].x * scaleX;
+    const my = players[myId].y * scaleY;
+    mctx.save();
+    mctx.shadowColor = '#ffffff';
+    mctx.shadowBlur = 6;
+    mctx.fillStyle = '#ffffff';
+    mctx.beginPath();
+    mctx.arc(mx, my, 3, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.shadowBlur = 0;
+    mctx.restore();
+  }
+
+  // Viewport rect
+  const vx = cameraX * scaleX;
+  const vy = cameraY * scaleY;
+  const vw = canvas.width * scaleX;
+  const vh = canvas.height * scaleY;
+  mctx.strokeStyle = '#ffffff';
+  mctx.lineWidth = 1.5;
+  mctx.strokeRect(vx, vy, vw, vh);
+
   requestAnimationFrame(gameLoop);
 }
 
 gameLoop();
-chatInput.focus(); // Focus chat on load? No, after play.
