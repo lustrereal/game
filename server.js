@@ -12,9 +12,12 @@ const WORLD_HEIGHT = 2000;
 
 const players = {};
 const bows = [];
-let bowCounter = 0;
+const projectiles = [];
 
-// Spawn bows once when server starts
+let bowCounter = 0;
+let projCounter = 0;
+
+// Spawn bows on server start
 for (let i = 0; i < 18; i++) {
   bows.push({
     id: bowCounter++,
@@ -37,26 +40,32 @@ io.on('connection', (socket) => {
       health: 100,
       inventory: [],
       equipped: null,
+      lastShot: 0,           // timestamp of last shot
       lastMessage: '',
       messageTimeout: 0
     };
 
-    // Send full current state to the new player
+    // Send full current state to new player
     socket.emit('currentState', {
       players,
       bows,
+      projectiles,
       myId: socket.id
     });
 
-    // Tell others someone joined
+    // Notify others of new player
     socket.broadcast.emit('playerJoined', players[socket.id]);
   });
 
   socket.on('playerMovement', (data) => {
     if (players[socket.id]) {
-      players[socket.id].x = data.x;
-      players[socket.id].y = data.y;
-      socket.broadcast.emit('playerMoved', { id: socket.id, x: data.x, y: data.y });
+      players[socket.id].x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
+      players[socket.id].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
+      socket.broadcast.emit('playerMoved', {
+        id: socket.id,
+        x: players[socket.id].x,
+        y: players[socket.id].y
+      });
     }
   });
 
@@ -93,11 +102,100 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('equipItem', (slotIndex) => {
+    if (!players[socket.id]) return;
+    const p = players[socket.id];
+    if (slotIndex >= 0 && slotIndex < p.inventory.length) {
+      p.equipped = p.inventory[slotIndex];
+    } else {
+      p.equipped = null;
+    }
+    io.emit('playerUpdate', {
+      id: socket.id,
+      inventory: p.inventory,
+      equipped: p.equipped
+    });
+  });
+
+  socket.on('shoot', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    if (!p.equipped || p.equipped.type !== 'bow') return;
+    if (Date.now() - p.lastShot < 3000) return; // 3-second cooldown
+
+    p.lastShot = Date.now();
+    p.equipped.uses--;
+
+    if (p.equipped.uses <= 0) {
+      p.equipped = null;
+      p.inventory = p.inventory.filter(item => item.uses > 0);
+    }
+
+    const speed = 12;
+    const vx = Math.cos(data.angle) * speed;
+    const vy = Math.sin(data.angle) * speed;
+
+    const proj = {
+      id: projCounter++,
+      x: p.x + 25,
+      y: p.y + 25,
+      vx,
+      vy,
+      ownerId: socket.id
+    };
+
+    projectiles.push(proj);
+    io.emit('projectileFired', proj);
+    io.emit('playerUpdate', {
+      id: socket.id,
+      inventory: p.inventory,
+      equipped: p.equipped
+    });
+  });
+
   socket.on('disconnect', () => {
     delete players[socket.id];
     io.emit('playerDisconnected', socket.id);
   });
 });
+
+// Projectile update loop (runs ~20 times per second)
+setInterval(() => {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const proj = projectiles[i];
+    proj.x += proj.vx;
+    proj.y += proj.vy;
+
+    // Check collision with players
+    let hit = false;
+    for (const id in players) {
+      if (id === proj.ownerId) continue;
+      const p = players[id];
+      const dx = proj.x - (p.x + 25);
+      const dy = proj.y - (p.y + 25);
+      if (Math.hypot(dx, dy) < 35) {
+        p.health = Math.max(0, p.health - 5);
+        io.emit('playerHit', { id, health: p.health });
+        projectiles.splice(i, 1);
+        hit = true;
+        break;
+      }
+    }
+
+    // Remove if off map
+    if (!hit && (
+      proj.x < -50 ||
+      proj.x > WORLD_WIDTH + 50 ||
+      proj.y < -50 ||
+      proj.y > WORLD_HEIGHT + 50
+    )) {
+      projectiles.splice(i, 1);
+    }
+  }
+
+  // Broadcast current projectiles to all clients
+  io.emit('projectilesUpdate', projectiles);
+}, 50); // 20 updates per second
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
