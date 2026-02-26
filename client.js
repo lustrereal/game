@@ -26,14 +26,16 @@ const projectiles = [];
 let myId = null;
 let cameraX = 0;
 let cameraY = 0;
+
 const movement = { up: false, down: false, left: false, right: false };
 const baseSpeed = 5;
 const sprintSpeed = 10;
 let sprinting = false;
 let stamina = 100;
 const maxStamina = 100;
-const staminaDrainRate = 25;   // units per second while sprinting
-const staminaRegenRate = 15;   // units per second when not sprinting
+const staminaDrainRate = 25;
+const staminaRegenRate = 15;
+
 let mouseX = 0;
 let mouseY = 0;
 let lastDirection = { x: 1, y: 0 };
@@ -61,10 +63,7 @@ playButton.addEventListener('click', () => {
 
 sendBtn.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', e => {
-  if (e.key === 'Enter') {
-    sendChatMessage();
-    e.preventDefault();
-  }
+  if (e.key === 'Enter') sendChatMessage();
 });
 
 function sendChatMessage() {
@@ -82,7 +81,7 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('click', () => {
-  if (players[myId] && players[myId].equipped?.type === 'bow') {
+  if (players[myId]?.equipped?.type === 'bow') {
     const p = players[myId];
     const dx = mouseX - (p.x + 25);
     const dy = mouseY - (p.y + 25);
@@ -135,8 +134,8 @@ document.addEventListener('keyup', e => {
 });
 
 function updateInventoryUI() {
-  if (!players[myId]) return;
   slotsDiv.innerHTML = '';
+  if (!players[myId]) return;
   players[myId].inventory.forEach((item, i) => {
     const slot = document.createElement('div');
     slot.className = 'slot';
@@ -162,21 +161,17 @@ function drawBowIcon(ctx, cx, cy, size) {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(size / 64, size / 64);
-
   ctx.fillStyle = '#8B4513';
   ctx.fillRect(-6, -24, 12, 48);
   ctx.fillRect(-20, -8, 40, 16);
-
   ctx.strokeStyle = '#444';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(-16, -12);
   ctx.lineTo(16, 12);
   ctx.stroke();
-
   ctx.fillStyle = '#ccc';
   ctx.fillRect(-4, -28, 8, 8);
-
   ctx.restore();
 }
 
@@ -184,14 +179,25 @@ function drawEquipped(player) {
   if (!player.equipped || player.equipped.type !== 'bow') return;
   ctx.save();
   ctx.translate(player.x + 25, player.y + 25);
-
   let angle = Math.atan2(mouseY - (player.y + 25), mouseX - (player.x + 25));
   if (Math.hypot(mouseX - (player.x + 25), mouseY - (player.y + 25)) < 30) {
     angle = Math.atan2(lastDirection.y, lastDirection.x);
   }
-
   ctx.rotate(angle);
   drawBowIcon(ctx, 0, 0, 64);
+  ctx.restore();
+}
+
+function drawName(x, y, name) {
+  ctx.save();
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'white';
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 3;
+  ctx.strokeText(name, x, y - 55);
+  ctx.fillText(name, x, y - 55);
   ctx.restore();
 }
 
@@ -239,39 +245,28 @@ function gameLoop(time = performance.now()) {
   const dt = (time - lastTime) / 1000;
   lastTime = time;
 
-  // Stamina logic
+  // Stamina
   if (sprinting && stamina > 0 && (movement.up || movement.down || movement.left || movement.right)) {
     stamina = Math.max(0, stamina - staminaDrainRate * dt);
   } else {
     stamina = Math.min(maxStamina, stamina + staminaRegenRate * dt);
   }
 
-  // Move player
+  // Move
   if (players[myId]) {
     const speed = sprinting && stamina > 0 ? sprintSpeed : baseSpeed;
-    let changed = false;
-
-    if (movement.up)    { players[myId].y -= speed; changed = true; }
-    if (movement.down)  { players[myId].y += speed; changed = true; }
-    if (movement.left)  { players[myId].x -= speed; changed = true; }
-    if (movement.right) { players[myId].x += speed; changed = true; }
+    if (movement.up) players[myId].y -= speed;
+    if (movement.down) players[myId].y += speed;
+    if (movement.left) players[myId].x -= speed;
+    if (movement.right) players[myId].x += speed;
 
     players[myId].x = Math.max(0, Math.min(WORLD_WIDTH - 50, players[myId].x));
     players[myId].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, players[myId].y));
 
-    if (changed) {
-      socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
-    }
-
-    if (movement.right || movement.left || movement.up || movement.down) {
-      lastDirection = {
-        x: (movement.right ? 1 : 0) - (movement.left ? 1 : 0),
-        y: (movement.down ? 1 : 0) - (movement.up ? 1 : 0)
-      };
-    }
+    socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
   }
 
-  // Camera follow
+  // Camera
   if (players[myId]) {
     cameraX = players[myId].x + 25 - canvas.width / 2;
     cameraY = players[myId].y + 25 - canvas.height / 2;
@@ -283,15 +278,16 @@ function gameLoop(time = performance.now()) {
   ctx.save();
   ctx.translate(-cameraX, -cameraY);
 
-  // Draw players
   Object.values(players).forEach(p => {
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, 50, 50);
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
     ctx.strokeRect(p.x, p.y, 50, 50);
 
     drawEquipped(p);
+
+    // Name above player
+    drawName(p.x + 25, p.y, p.name);
 
     // Health bar under player
     const barW = 50;
@@ -302,17 +298,16 @@ function gameLoop(time = performance.now()) {
     ctx.fillStyle = pct > 0.5 ? '#0f0' : pct > 0.25 ? '#ff0' : '#f00';
     ctx.fillRect(p.x, p.y - 12, barW * pct, barH);
 
+    // Speech bubble
     if (p.lastMessage && Date.now() < p.messageTimeout) {
-      drawBubble(p.x + 25, p.y, p.lastMessage, p.color);
+      drawBubble(p.x + 25, p.y - 20, p.lastMessage, p.color);
     }
   });
 
-  // Draw bows
   bows.forEach(b => {
     drawBowIcon(ctx, b.x, b.y, 48);
   });
 
-  // Highlight nearby bows for pickup
   if (players[myId]) {
     const p = players[myId];
     bows.forEach(bow => {
@@ -329,12 +324,9 @@ function gameLoop(time = performance.now()) {
     });
   }
 
-  // Draw projectiles
   projectiles.forEach(p => {
     ctx.fillStyle = '#ff0000';
     ctx.fillRect(p.x - 10, p.y - 5, 20, 10);
-    ctx.fillStyle = 'rgba(255,100,100,0.6)';
-    ctx.fillRect(p.x - 14, p.y - 7, 28, 14);
   });
 
   ctx.restore();
@@ -348,34 +340,28 @@ function gameLoop(time = performance.now()) {
   const sy = minimap.height / WORLD_HEIGHT;
 
   Object.values(players).forEach(p => {
-    const mx = p.x * sx;
-    const my = p.y * sy;
     mctx.fillStyle = p.color;
     mctx.beginPath();
-    mctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+    mctx.arc(p.x * sx, p.y * sy, 2.5, 0, Math.PI * 2);
     mctx.fill();
   });
 
   if (players[myId]) {
-    const mx = players[myId].x * sx;
-    const my = players[myId].y * sy;
     mctx.save();
     mctx.shadowColor = '#fff';
     mctx.shadowBlur = 8;
-    mctx.fillStyle = '#ffffff';
+    mctx.fillStyle = '#fff';
     mctx.beginPath();
-    mctx.arc(mx, my, 4, 0, Math.PI * 2);
+    mctx.arc(players[myId].x * sx, players[myId].y * sy, 4, 0, Math.PI * 2);
     mctx.fill();
     mctx.restore();
   }
 
-  const vx = cameraX * sx;
-  const vy = cameraY * sy;
   mctx.strokeStyle = '#ffffff';
   mctx.lineWidth = 2;
-  mctx.strokeRect(vx, vy, canvas.width * sx, canvas.height * sy);
+  mctx.strokeRect(cameraX * sx, cameraY * sy, canvas.width * sx, canvas.height * sy);
 
-  // Update UI bars
+  // UI bars
   if (players[myId]) {
     const hp = players[myId].health ?? 100;
     healthText.textContent = `Health: ${Math.floor(hp)}/100`;
@@ -394,19 +380,13 @@ function gameLoop(time = performance.now()) {
 
 requestAnimationFrame(gameLoop);
 
-// ────────────────────────────────────────────────
 // Socket events
-// ────────────────────────────────────────────────
-
-socket.on('connect', () => {
-  myId = socket.id;
-});
-
-socket.on('currentPlayers', serverPlayers => {
-  Object.keys(serverPlayers).forEach(id => {
-    players[id] = { ...serverPlayers[id], lastMessage: '', messageTimeout: 0 };
-  });
-  if (myId in players) console.log("Joined successfully - my player found");
+socket.on('currentState', data => {
+  Object.assign(players, data.players);
+  bows.length = 0;
+  bows.push(...data.bows);
+  myId = data.myId;
+  console.log('Received initial state, myId:', myId);
 });
 
 socket.on('playerJoined', data => {
@@ -420,30 +400,22 @@ socket.on('playerMoved', data => {
   }
 });
 
-socket.on('playerUpdate', data => {
+socket.on('chatMessage', data => {
+  addMessageToChat(data.name, data.color, data.message);
   if (players[data.id]) {
-    players[data.id].inventory = data.inventory;
-    players[data.id].equipped = data.equipped;
+    players[data.id].lastMessage = data.message;
+    players[data.id].messageTimeout = Date.now() + 5000;
   }
-});
-
-socket.on('playerHit', data => {
-  if (players[data.id]) players[data.id].health = data.health;
 });
 
 socket.on('bowPickedUp', data => {
   bows = bows.filter(b => b.id !== data.bowId);
 });
 
-socket.on('projectileFired', proj => projectiles.push(proj));
-
-socket.on('projectilesUpdate', projs => projectiles = projs);
-
-socket.on('chatMessage', data => {
-  addMessageToChat(data.name, data.color, data.message);
+socket.on('playerUpdate', data => {
   if (players[data.id]) {
-    players[data.id].lastMessage = data.message;
-    players[data.id].messageTimeout = Date.now() + 5000;
+    players[data.id].inventory = data.inventory;
+    players[data.id].equipped = data.equipped;
   }
 });
 
