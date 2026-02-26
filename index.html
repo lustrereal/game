@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiplayer Square Game</title>
+  <style>
+    body { margin: 0; background: #f0f0f0; font-family: Arial, sans-serif; }
+    #menu { text-align: center; padding: 50px; }
+    #game { display: none; }
+    canvas { background: green; border: 1px solid #000; display: block; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="menu">
+    <h1>Choose Your Color</h1>
+    <select id="colorSelect">
+      <option value="red">Red</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="yellow">Yellow</option>
+      <option value="purple">Purple</option>
+    </select>
+    <button id="playButton">Play</button>
+  </div>
+  <div id="game">
+    <canvas id="canvas" width="900" height="700"></canvas>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
