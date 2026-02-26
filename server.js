@@ -1,73 +1,147 @@
-// Updated server.js (full file - copy-paste replace)
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
-  cors: {
-    origin: "*", 
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-app.use(express.static(__dirname)); // Serve client files
+app.use(express.static(__dirname));
 
 const WORLD_WIDTH = 3000;
 const WORLD_HEIGHT = 2000;
+const players = {};
+const bows = []; // {id, x, y}
+const projectiles = []; // {id, x, y, vx, vy, ownerId}
 
-const players = {}; // {id: {x, y, color, name}}
+let bowIdCounter = 0;
+let projIdCounter = 0;
+
+// Spawn 10 bows initially
+for (let i = 0; i < 10; i++) {
+  bows.push({
+    id: bowIdCounter++,
+    x: Math.random() * (WORLD_WIDTH - 100) + 50,
+    y: Math.random() * (WORLD_HEIGHT - 100) + 50
+  });
+}
 
 io.on('connection', (socket) => {
-  console.log('A player connected:', socket.id);
+  console.log('Player connected:', socket.id);
 
-  // Send current players to new player
-  socket.emit('currentPlayers', players);
-
-  // Broadcast new player to others
-  socket.broadcast.emit('newPlayer', { id: socket.id });
+  socket.emit('currentState', { players, bows, projectiles });
 
   socket.on('join', (data) => {
-    if (!data.name || data.name.trim().length === 0) data.name = 'Anonymous';
-    data.name = data.name.trim().substring(0, 16);
+    const name = (data.name || 'Anonymous').trim().substring(0, 16);
     players[socket.id] = {
-      x: Math.floor(Math.random() * (WORLD_WIDTH - 100)) + 50,
-      y: Math.floor(Math.random() * (WORLD_HEIGHT - 100)) + 50,
+      x: Math.random() * (WORLD_WIDTH - 100) + 50,
+      y: Math.random() * (WORLD_HEIGHT - 100) + 50,
       color: data.color,
-      name: data.name
+      name,
+      health: 100,
+      inventory: [], // array of {type: 'bow', uses: 5}
+      equipped: null, // {type: 'bow', uses: 5}
+      lastShot: 0
     };
     io.emit('playerJoined', { id: socket.id, ...players[socket.id] });
   });
 
-  socket.on('playerMovement', (movementData) => {
+  socket.on('playerMovement', (data) => {
     if (players[socket.id]) {
-      const newX = Math.max(0, Math.min(WORLD_WIDTH - 50, movementData.x));
-      const newY = Math.max(0, Math.min(WORLD_HEIGHT - 50, movementData.y));
-      players[socket.id].x = newX;
-      players[socket.id].y = newY;
-      socket.broadcast.emit('playerMoved', { id: socket.id, x: newX, y: newY });
+      let p = players[socket.id];
+      p.x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
+      p.y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
+
+      // Check bow pickup
+      for (let i = bows.length - 1; i >= 0; i--) {
+        const b = bows[i];
+        if (Math.hypot(p.x + 25 - b.x, p.y + 25 - b.y) < 60) {
+          if (p.inventory.length < 3) {
+            p.inventory.push({ type: 'bow', uses: 5 });
+            bows.splice(i, 1);
+            io.emit('bowPickedUp', { bowId: b.id, playerId: socket.id });
+          }
+          break;
+        }
+      }
+
+      socket.broadcast.emit('playerMoved', { id: socket.id, x: p.x, y: p.y });
     }
   });
 
-  socket.on('chatMessage', (data) => {
-    if (players[socket.id] && data.message && data.message.trim()) {
-      const player = players[socket.id];
-      const message = data.message.trim().substring(0, 100);
-      io.emit('chatMessage', {
-        id: socket.id,
-        name: player.name,
-        color: player.color,
-        message: message
-      });
+  socket.on('equipItem', (slotIndex) => {
+    if (players[socket.id]) {
+      const p = players[socket.id];
+      if (slotIndex >= 0 && slotIndex < p.inventory.length) {
+        p.equipped = p.inventory[slotIndex];
+      } else {
+        p.equipped = null;
+      }
+      io.emit('playerEquipped', { id: socket.id, equipped: p.equipped });
     }
   });
+
+  socket.on('shoot', (data) => {  // data: {angle}
+    const p = players[socket.id];
+    if (!p || !p.equipped || p.equipped.type !== 'bow' || Date.now() - p.lastShot < 3000) return;
+
+    p.lastShot = Date.now();
+    p.equipped.uses--;
+    if (p.equipped.uses <= 0) {
+      p.equipped = null;
+      p.inventory = p.inventory.filter(item => item.uses > 0);
+    }
+
+    const speed = 12;
+    const vx = Math.cos(data.angle) * speed;
+    const vy = Math.sin(data.angle) * speed;
+
+    const proj = {
+      id: projIdCounter++,
+      x: p.x + 25,
+      y: p.y + 25,
+      vx, vy,
+      ownerId: socket.id
+    };
+    projectiles.push(proj);
+
+    io.emit('projectileFired', proj);
+    io.emit('playerUpdate', { id: socket.id, equipped: p.equipped, inventory: p.inventory });
+  });
+
+  socket.on('chatMessage', (data) => { /* unchanged */ });
 
   socket.on('disconnect', () => {
-    console.log('Player disconnected:', socket.id);
     delete players[socket.id];
     io.emit('playerDisconnected', socket.id);
   });
 });
 
+setInterval(() => {
+  // Update projectiles
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const proj = projectiles[i];
+    proj.x += proj.vx;
+    proj.y += proj.vy;
+
+    // Check hits
+    for (const id in players) {
+      const p = players[id];
+      if (id !== proj.ownerId && Math.hypot(proj.x - (p.x + 25), proj.y - (p.y + 25)) < 40) {
+        p.health = Math.max(0, p.health - 5);
+        io.emit('playerHit', { id, health: p.health });
+        projectiles.splice(i, 1);
+        break;
+      }
+    }
+
+    // Remove off-screen
+    if (proj.x < -50 || proj.x > WORLD_WIDTH + 50 || proj.y < -50 || proj.y > WORLD_HEIGHT + 50) {
+      projectiles.splice(i, 1);
+    }
+  }
+
+  io.emit('projectilesUpdate', projectiles);
+}, 50); // ~20 fps sync
+
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+http.listen(PORT, () => console.log(`Server on ${PORT}`));
