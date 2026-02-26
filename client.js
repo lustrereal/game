@@ -82,11 +82,32 @@ canvas.addEventListener('click', () => {
 
 document.addEventListener('keydown', e => {
   if (e.target === chatInput) return;
+
   switch (e.key.toLowerCase()) {
     case 'w': movement.up = true; break;
     case 's': movement.down = true; break;
     case 'a': movement.left = true; break;
     case 'd': movement.right = true; break;
+    case 'e':
+      // Attempt to pick up the nearest bow
+      if (players[myId]) {
+        const p = players[myId];
+        let closestBow = null;
+        let minDist = Infinity;
+
+        bows.forEach(bow => {
+          const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
+          if (dist < 70 && dist < minDist) {
+            minDist = dist;
+            closestBow = bow;
+          }
+        });
+
+        if (closestBow) {
+          socket.emit('pickupBow', closestBow.id);
+        }
+      }
+      break;
     case 'enter':
       if (document.activeElement !== chatInput) {
         e.preventDefault();
@@ -276,6 +297,23 @@ function gameLoop() {
   bows.forEach(b => {
     drawBowIcon(ctx, b.x, b.y, 48);
   });
+
+  // Highlight nearby bows (visual feedback for pickup)
+  if (players[myId]) {
+    const p = players[myId];
+    bows.forEach(bow => {
+      const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
+      if (dist < 70) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(bow.x, bow.y, 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+  }
 
   // Draw projectiles
   projectiles.forEach(p => {
