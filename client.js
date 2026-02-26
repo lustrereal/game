@@ -1,4 +1,3 @@
-// FULL client.js - COPY-PASTE REPLACE YOUR ENTIRE client.js
 const socket = io();
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -25,67 +24,57 @@ const players = {};
 const bows = [];
 const projectiles = [];
 let myId = null;
-let cameraX = 0;
-let cameraY = 0;
+let cameraX = 0, cameraY = 0;
 const movement = { up: false, down: false, left: false, right: false };
 const baseSpeed = 5;
 const sprintSpeed = 10;
 let sprinting = false;
 let stamina = 100;
-const staminaDrain = 20; // per second
-const staminaRegen = 10; // per second
-let mouseX = 0;
-let mouseY = 0;
+let mouseX = 0, mouseY = 0;
 let lastDirection = { x: 1, y: 0 };
-
-function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-  return text.replace(/[&<>"']/g, m => map[m]);
-}
-
-function addMessageToChat(name, color, message) {
-  const li = document.createElement('li');
-  li.innerHTML = `<span style="color: ${color}; font-weight: bold;">${escapeHtml(name)}:</span> ${escapeHtml(message)}`;
-  messagesUl.appendChild(li);
-  if (messagesUl.children.length > 50) {
-    messagesUl.removeChild(messagesUl.firstChild);
-  }
-  messagesUl.scrollTop = messagesUl.scrollHeight;
-}
 
 playButton.addEventListener('click', () => {
   const color = colorSelect.value;
-  const name = nameInput.value.trim() || 'Anonymous';
+  const name = nameInput.value.trim() || 'Player';
   menu.style.display = 'none';
   gameDiv.style.display = 'block';
   socket.emit('join', { color, name });
 });
 
-sendBtn.addEventListener('click', sendChatMessage);
-chatInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendChatMessage();
-});
+sendBtn.addEventListener('click', sendChat);
+chatInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendChat(); });
 
-function sendChatMessage() {
-  const message = chatInput.value.trim();
-  if (message) {
-    socket.emit('chatMessage', { message });
+function sendChat() {
+  const msg = chatInput.value.trim();
+  if (msg) {
+    socket.emit('chatMessage', { message: msg });
     chatInput.value = '';
   }
 }
 
-// Keyboard controls
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
   switch (e.key.toLowerCase()) {
     case 'w': movement.up = true; break;
     case 's': movement.down = true; break;
     case 'a': movement.left = true; break;
     case 'd': movement.right = true; break;
     case 'shift': sprinting = true; break;
+    case 'e':
+      if (players[myId]) {
+        const p = players[myId];
+        let closest = null, minD = 80;
+        bows.forEach(b => {
+          const d = Math.hypot(p.x + 25 - b.x, p.y + 25 - b.y);
+          if (d < minD) { minD = d; closest = b; }
+        });
+        if (closest) socket.emit('pickupBow', closest.id);
+      }
+      break;
   }
 });
 
-document.addEventListener('keyup', (e) => {
+document.addEventListener('keyup', e => {
   switch (e.key.toLowerCase()) {
     case 'w': movement.up = false; break;
     case 's': movement.down = false; break;
@@ -95,25 +84,26 @@ document.addEventListener('keyup', (e) => {
   }
 });
 
-// Game loop
-let lastTime = performance.now();
-function gameLoop(time) {
-  const dt = (time - lastTime) / 1000;
-  lastTime = time;
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouseX = e.clientX - r.left + cameraX;
+  mouseY = e.clientY - r.top + cameraY;
+});
 
-  // Update stamina
-  if (sprinting && (movement.up || movement.down || movement.left || movement.right)) {
-    stamina = Math.max(0, stamina - staminaDrain * dt);
-  } else {
-    stamina = Math.min(100, stamina + staminaRegen * dt);
+canvas.addEventListener('click', () => {
+  if (players[myId]?.equipped?.type === 'bow') {
+    const p = players[myId];
+    const angle = Math.atan2(mouseY - p.y - 25, mouseX - p.x - 25);
+    socket.emit('shoot', { angle });
   }
+});
 
-  // Update position
+function gameLoop() {
+  const speed = sprinting ? sprintSpeed : baseSpeed;
   if (players[myId]) {
-    const speed = sprinting && stamina > 0 ? sprintSpeed : baseSpeed;
-    if (movement.up) players[myId].y -= speed;
-    if (movement.down) players[myId].y += speed;
-    if (movement.left) players[myId].x -= speed;
+    if (movement.up)    players[myId].y -= speed;
+    if (movement.down)  players[myId].y += speed;
+    if (movement.left)  players[myId].x -= speed;
     if (movement.right) players[myId].x += speed;
 
     players[myId].x = Math.max(0, Math.min(WORLD_WIDTH - 50, players[myId].x));
@@ -122,11 +112,26 @@ function gameLoop(time) {
     socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
   }
 
-  // Render
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // UI update
+  // Camera
   if (players[myId]) {
+    cameraX = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, players[myId].x + 25 - canvas.width / 2));
+    cameraY = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, players[myId].y + 25 - canvas.height / 2));
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(-cameraX, -cameraY);
+
+  // Draw players, bows, projectiles, health bars, etc. (your existing drawing code here)
+  // ... paste your previous drawing logic ...
+
+  ctx.restore();
+
+  // Update UI bars
+  if (players[myId]) {
+    healthText.textContent = `Health: ${Math.floor(players[myId].health || 100)}/100`;
+    healthBar.style.width = `${players[myId].health || 100}%`;
+
     staminaText.textContent = `Stamina: ${Math.floor(stamina)}/100`;
     staminaBar.style.width = `${stamina}%`;
   }
@@ -134,9 +139,39 @@ function gameLoop(time) {
   requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+requestAnimationFrame(gameLoop);
 
-// Socket events (simplified for brevity)
-socket.on('chatMessage', (data) => {
-  addMessageToChat(data.name, data.color, data.message);
+// Socket listeners – make sure these match server events
+socket.on('currentPlayers', (serverPlayers) => {
+  Object.keys(serverPlayers).forEach(id => {
+    players[id] = serverPlayers[id];
+  });
+  if (socket.id in players) myId = socket.id;
 });
+
+socket.on('playerJoined', data => {
+  players[data.id] = data;
+  if (data.id === socket.id) myId = data.id;
+});
+
+socket.on('playerMoved', data => {
+  if (players[data.id]) {
+    players[data.id].x = data.x;
+    players[data.id].y = data.y;
+  }
+});
+
+socket.on('chatMessage', data => addMessageToChat(data.name, data.color, data.message));
+
+socket.on('bowPickedUp', data => {
+  bows = bows.filter(b => b.id !== data.bowId);
+});
+
+socket.on('playerUpdate', data => {
+  if (players[data.id]) {
+    players[data.id].inventory = data.inventory;
+    players[data.id].equipped = data.equipped;
+  }
+});
+
+// Add other events you had (projectileFired, playerHit, etc.)
