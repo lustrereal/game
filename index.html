@@ -5,159 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Multiplayer Square Game</title>
   <style>
-    body { 
-      margin: 0; 
-      background: #f0f0f0; 
-      font-family: Arial, sans-serif; 
-      overflow: hidden;
-    }
+    body { margin: 0; background: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
     #menu { 
-      text-align: center; 
-      padding: 50px; 
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
-      z-index: 200;
+      text-align: center; padding: 50px; 
+      position: fixed; inset: 0; 
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      background: rgba(255,255,255,0.9); z-index: 200;
     }
-    #game { 
-      display: none; 
-      height: 100vh;
-      position: relative;
-    }
+    #game { display: none; height: 100vh; position: relative; }
     #canvas { 
-      background: #228B22;
-      border: 2px solid #333; 
-      display: block; 
-      margin: 0 auto; 
-      cursor: crosshair;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      background: #228B22; border: 2px solid #333; display: block; margin: 0 auto; 
+      cursor: crosshair; box-shadow: 0 0 20px rgba(0,0,0,0.3);
     }
     #chat { 
-      position: fixed; 
-      top: 10px; 
-      left: 10px; 
-      width: 300px; 
-      background: rgba(0,0,0,0.8); 
-      color: white; 
-      border-radius: 10px; 
-      padding: 10px; 
-      font-size: 14px; 
-      z-index: 100;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      position: fixed; top: 10px; left: 10px; width: 320px; 
+      background: rgba(0,0,0,0.75); color: white; border-radius: 10px; padding: 10px; 
+      font-size: 14px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     }
-    #messages { 
-      height: 140px; 
-      overflow-y: auto; 
-      margin: 0 0 10px 0; 
-      padding: 0; 
-      list-style: none; 
+    #messages { height: 140px; overflow-y: auto; margin: 0 0 10px 0; padding: 0; list-style: none; }
+    #messages li { margin: 4px 0; word-wrap: break-word; font-size: 13px; }
+    #chatInput { width: 74%; padding: 8px; border: none; border-radius: 6px; background: white; }
+    #sendBtn { width: 24%; padding: 8px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #nameInput, #colorSelect { margin: 15px; padding: 10px; width: 220px; font-size: 16px; }
+    #minimap { 
+      position: fixed; top: 10px; right: 230px; width: 180px; height: 135px; 
+      border: 2px solid #444; border-radius: 8px; background: #000; z-index: 90;
     }
-    #messages li { 
-      margin: 3px 0; 
-      word-wrap: break-word;
-      font-size: 13px;
+    #inventory { 
+      position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.75); 
+      border-radius: 8px; padding: 10px; color: white; z-index: 100;
     }
-    #chatInput { 
-      width: 75%; 
-      padding: 6px; 
-      border: none; 
-      border-radius: 5px; 
-      background: rgba(255,255,255,0.9);
+    .slot { 
+      width: 50px; height: 50px; background: #444; border: 2px solid #777; margin: 5px; 
+      display: inline-block; cursor: pointer; border-radius: 6px;
     }
-    #sendBtn { 
-      width: 22%; 
-      padding: 6px; 
-      background: #4CAF50; 
-      color: white; 
-      border: none; 
-      border-radius: 5px; 
-      cursor: pointer; 
-      font-weight: bold;
+    .slot.selected { border-color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
+    #uiBars { 
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); 
+      display: flex; flex-direction: column; gap: 12px; align-items: center; z-index: 100;
     }
-    #sendBtn:hover { background: #45a049; }
-    #nameInput {
-      display: block;
-      margin: 20px auto;
-      padding: 10px;
-      width: 200px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      font-size: 16px;
+    .bar-container { 
+      background: rgba(0,0,0,0.65); padding: 8px 16px; border-radius: 8px; 
+      color: white; font-weight: bold; min-width: 240px; text-align: center;
     }
-    #minimap {
-      position: fixed;
-      top: 10px;
-      right: 220px;
-      width: 200px;
-      height: 150px;
-      border: 2px solid #333;
-      border-radius: 10px;
-      background: #111;
-      z-index: 100;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    }
-    #inventory {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background: rgba(0,0,0,0.7);
-      border-radius: 8px;
-      padding: 10px;
-      color: white;
-      font-size: 14px;
-      pointer-events: all;
-      z-index: 100;
-    }
-    .slot {
-      width: 48px;
-      height: 48px;
-      background: #555;
-      border: 2px solid #888;
-      margin: 4px;
-      display: inline-block;
-      position: relative;
-      cursor: pointer;
-      border-radius: 4px;
-    }
-    .slot.selected {
-      border-color: #ff0;
-      box-shadow: 0 0 8px #ff0;
-    }
-    #healthBarContainer {
-      position: fixed;
-      bottom: 100px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.6);
-      padding: 8px 16px;
-      border-radius: 8px;
-      color: white;
-      font-weight: bold;
-      z-index: 100;
-    }
-    #staminaBarContainer {
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.6);
-      padding: 8px 16px;
-      border-radius: 8px;
-      color: white;
-      font-weight: bold;
-      z-index: 100;
-    }
+    .bar-outer { width: 220px; height: 18px; background: #222; border-radius: 6px; overflow: hidden; margin-top: 4px; }
+    .bar-inner { height: 100%; transition: width 0.4s ease, background 0.4s; }
   </style>
 </head>
 <body>
+
   <div id="menu">
     <h1>Multiplayer Square Game</h1>
     <input id="nameInput" placeholder="Your name (optional)" maxlength="16">
-    <br>
     <select id="colorSelect">
       <option value="red">Red</option>
       <option value="blue" selected>Blue</option>
@@ -168,31 +67,36 @@
       <option value="cyan">Cyan</option>
       <option value="pink">Pink</option>
     </select>
-    <br><br>
-    <button id="playButton" style="padding:12px 24px; font-size:18px; background:#4CAF50; color:white; border:none; border-radius:5px; cursor:pointer;">Play</button>
+    <button id="playButton">Play</button>
   </div>
+
   <div id="game">
-    <canvas id="canvas" width="900" height="700"></canvas>
-    <canvas id="minimap" width="200" height="150"></canvas>
+    <canvas id="canvas" width="960" height="720"></canvas>
+    <canvas id="minimap" width="180" height="135"></canvas>
+
     <div id="chat">
       <ul id="messages"></ul>
       <input id="chatInput" placeholder="Say something..." maxlength="100">
       <button id="sendBtn">Send</button>
     </div>
+
     <div id="inventory">
       <div>Inventory</div>
       <div id="slots"></div>
     </div>
-    <div id="healthBarContainer">
-      <div id="healthText">Health: 100/100</div>
-      <div style="width:220px; height:20px; background:#333; border-radius:6px; overflow:hidden; margin-top:4px;">
-        <div id="healthBar" style="width:100%; height:100%; background:linear-gradient(to right, #0f0, #0f0); transition: width 0.3s, background 0.3s;"></div>
+
+    <div id="uiBars">
+      <div class="bar-container" id="healthBarContainer">
+        <div id="healthText">Health: 100/100</div>
+        <div class="bar-outer">
+          <div id="healthBar" class="bar-inner" style="width:100%; background:#2ecc71;"></div>
+        </div>
       </div>
-    </div>
-    <div id="staminaBarContainer">
-      <div id="staminaText">Stamina: 100/100</div>
-      <div style="width:220px; height:20px; background:#333; border-radius:6px; overflow:hidden; margin-top:4px;">
-        <div id="staminaBar" style="width:100%; height:100%; background:linear-gradient(to right, #3498db, #3498db); transition: width 0.3s, background 0.3s;"></div>
+      <div class="bar-container" id="staminaBarContainer">
+        <div id="staminaText">Stamina: 100/100</div>
+        <div class="bar-outer">
+          <div id="staminaBar" class="bar-inner" style="width:100%; background:#3498db;"></div>
+        </div>
       </div>
     </div>
   </div>
