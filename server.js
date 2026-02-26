@@ -17,7 +17,7 @@ const projectiles = [];
 let bowCounter = 0;
 let projCounter = 0;
 
-// Spawn bows on server start
+// Spawn bows once when server starts
 for (let i = 0; i < 18; i++) {
   bows.push({
     id: bowCounter++,
@@ -31,21 +31,34 @@ io.on('connection', (socket) => {
 
   socket.on('join', (data) => {
     const name = (data.name || 'Anonymous').trim().substring(0, 16);
+    const mode = data.mode || 'normal';
+
+    let role = null;
+    let color = data.color || 'blue';
+
+    if (mode === 'tag') {
+      // Random role assignment (30% chance to be tagger to start)
+      role = Math.random() < 0.3 ? 'tagger' : 'runner';
+      color = role === 'tagger' ? '#ff5252' : '#448aff';
+    }
+
     players[socket.id] = {
       id: socket.id,
       x: Math.floor(Math.random() * 600) + 200,
       y: Math.floor(Math.random() * 400) + 200,
-      color: data.color || 'blue',
+      color,
       name,
       health: 100,
       inventory: [],
       equipped: null,
-      lastShot: 0,           // timestamp of last shot
+      role,           // 'tagger', 'runner', or null
+      mode,           // 'normal' or 'tag'
+      lastShot: 0,
       lastMessage: '',
       messageTimeout: 0
     };
 
-    // Send full current state to new player
+    // Send full current state to the new player
     socket.emit('currentState', {
       players,
       bows,
@@ -59,12 +72,47 @@ io.on('connection', (socket) => {
 
   socket.on('playerMovement', (data) => {
     if (players[socket.id]) {
-      players[socket.id].x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
-      players[socket.id].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
+      const p = players[socket.id];
+      p.x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
+      p.y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
+
+      // In tag mode: check for tag collisions
+      if (p.mode === 'tag') {
+        for (const otherId in players) {
+          if (otherId === socket.id) continue;
+          const other = players[otherId];
+          if (other.mode !== 'tag') continue;
+
+          const dist = Math.hypot(p.x + 25 - other.x - 25, p.y + 25 - other.y - 25);
+          if (dist < 60) {
+            // Tagger touches runner → runner becomes tagger
+            if (p.role === 'tagger' && other.role === 'runner') {
+              other.role = 'tagger';
+              other.color = '#ff5252';
+              io.emit('playerUpdate', {
+                id: otherId,
+                role: other.role,
+                color: other.color
+              });
+              console.log(`${other.name} was tagged by ${p.name}!`);
+            } else if (other.role === 'tagger' && p.role === 'runner') {
+              p.role = 'tagger';
+              p.color = '#ff5252';
+              io.emit('playerUpdate', {
+                id: socket.id,
+                role: p.role,
+                color: p.color
+              });
+              console.log(`${p.name} was tagged by ${other.name}!`);
+            }
+          }
+        }
+      }
+
       socket.broadcast.emit('playerMoved', {
         id: socket.id,
-        x: players[socket.id].x,
-        y: players[socket.id].y
+        x: p.x,
+        y: p.y
       });
     }
   });
@@ -121,7 +169,7 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p) return;
     if (!p.equipped || p.equipped.type !== 'bow') return;
-    if (Date.now() - p.lastShot < 3000) return; // 3-second cooldown
+    if (Date.now() - p.lastShot < 3000) return;
 
     p.lastShot = Date.now();
     p.equipped.uses--;
@@ -139,8 +187,7 @@ io.on('connection', (socket) => {
       id: projCounter++,
       x: p.x + 25,
       y: p.y + 25,
-      vx,
-      vy,
+      vx, vy,
       ownerId: socket.id
     };
 
@@ -159,15 +206,15 @@ io.on('connection', (socket) => {
   });
 });
 
-// Projectile update loop (runs ~20 times per second)
+// Projectile physics & hit detection (runs ~20 times/sec)
 setInterval(() => {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
     proj.x += proj.vx;
     proj.y += proj.vy;
 
-    // Check collision with players
     let hit = false;
+
     for (const id in players) {
       if (id === proj.ownerId) continue;
       const p = players[id];
@@ -182,20 +229,17 @@ setInterval(() => {
       }
     }
 
-    // Remove if off map
+    // Remove off-map projectiles
     if (!hit && (
-      proj.x < -50 ||
-      proj.x > WORLD_WIDTH + 50 ||
-      proj.y < -50 ||
-      proj.y > WORLD_HEIGHT + 50
+      proj.x < -50 || proj.x > WORLD_WIDTH + 50 ||
+      proj.y < -50 || proj.y > WORLD_HEIGHT + 50
     )) {
       projectiles.splice(i, 1);
     }
   }
 
-  // Broadcast current projectiles to all clients
   io.emit('projectilesUpdate', projectiles);
-}, 50); // 20 updates per second
+}, 50);
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
