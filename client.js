@@ -74,14 +74,12 @@ function sendChatMessage() {
   }
 }
 
-// Mouse aiming
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouseX = e.clientX - rect.left + cameraX;
   mouseY = e.clientY - rect.top + cameraY;
 });
 
-// Shoot on left click
 canvas.addEventListener('click', e => {
   if (e.button === 0 && players[myId]?.equipped?.type === 'bow') {
     const p = players[myId];
@@ -92,7 +90,6 @@ canvas.addEventListener('click', e => {
   }
 });
 
-// Keyboard controls
 document.addEventListener('keydown', e => {
   if (e.target === chatInput) return;
 
@@ -113,9 +110,11 @@ document.addEventListener('keydown', e => {
         if (closest) socket.emit('pickupBow', closest.id);
       }
       break;
-    case '1': case '2': case '3':
+    case '1':
+    case '2':
+    case '3':
       const slot = parseInt(e.key) - 1;
-      if (players[myId]) socket.emit('equipItem', slot);
+      socket.emit('equipItem', slot);
       break;
     case 'enter':
       if (document.activeElement !== chatInput) {
@@ -138,8 +137,8 @@ document.addEventListener('keyup', e => {
 });
 
 function updateInventoryUI() {
-  if (!players[myId]) return;
   slotsDiv.innerHTML = '';
+  if (!players[myId]) return;
   players[myId].inventory.forEach((item, i) => {
     const slot = document.createElement('div');
     slot.className = 'slot';
@@ -184,12 +183,8 @@ function drawEquipped(player) {
   ctx.save();
   ctx.translate(player.x + 25, player.y + 25);
 
-  const dx = mouseX - (player.x + 25);
-  const dy = mouseY - (player.y + 25);
-  let angle = Math.atan2(dy, dx);
-
-  // Fallback to last movement direction if mouse is very close
-  if (Math.hypot(dx, dy) < 30) {
+  let angle = Math.atan2(mouseY - (player.y + 25), mouseX - (player.x + 25));
+  if (Math.hypot(mouseX - (player.x + 25), mouseY - (player.y + 25)) < 30) {
     angle = Math.atan2(lastDirection.y, lastDirection.x);
   }
 
@@ -255,7 +250,7 @@ function gameLoop(time = performance.now()) {
   const dt = (time - lastTime) / 1000;
   lastTime = time;
 
-  // Stamina logic
+  // Stamina
   if (sprinting && stamina > 0 && (movement.up || movement.down || movement.left || movement.right)) {
     stamina = Math.max(0, stamina - staminaDrainRate * dt);
   } else {
@@ -275,9 +270,7 @@ function gameLoop(time = performance.now()) {
     players[myId].x = Math.max(0, Math.min(WORLD_WIDTH - 50, players[myId].x));
     players[myId].y = Math.max(0, Math.min(WORLD_HEIGHT - 50, players[myId].y));
 
-    if (changed) {
-      socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
-    }
+    if (changed) socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
 
     if (movement.right || movement.left || movement.up || movement.down) {
       lastDirection = {
@@ -299,7 +292,7 @@ function gameLoop(time = performance.now()) {
   ctx.save();
   ctx.translate(-cameraX, -cameraY);
 
-  // Draw players
+  // Players
   Object.values(players).forEach(p => {
     ctx.fillStyle = p.color;
     ctx.fillRect(p.x, p.y, 50, 50);
@@ -319,18 +312,15 @@ function gameLoop(time = performance.now()) {
     ctx.fillStyle = pct > 0.5 ? '#0f0' : pct > 0.25 ? '#ff0' : '#f00';
     ctx.fillRect(p.x, p.y - 12, barW * pct, barH);
 
-    // Chat bubble
     if (p.lastMessage && Date.now() < p.messageTimeout) {
       drawBubble(p.x + 25, p.y - 20, p.lastMessage, p.color);
     }
   });
 
-  // Draw bows (only if not picked up)
-  bows.forEach(b => {
-    drawBowIcon(ctx, b.x, b.y, 48);
-  });
+  // Bows
+  bows.forEach(b => drawBowIcon(ctx, b.x, b.y, 48));
 
-  // Highlight pick-up range
+  // Pickup highlight
   if (players[myId]) {
     const p = players[myId];
     bows.forEach(bow => {
@@ -347,17 +337,39 @@ function gameLoop(time = performance.now()) {
     });
   }
 
-  // Draw projectiles
+  // Rotating projectiles (arrows)
   projectiles.forEach(p => {
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(p.x - 10, p.y - 5, 20, 10);
-    ctx.fillStyle = 'rgba(255,100,100,0.6)';
-    ctx.fillRect(p.x - 14, p.y - 7, 28, 14);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    // Rotate to face direction of travel
+    const angle = Math.atan2(p.vy, p.vx);
+    ctx.rotate(angle);
+
+    // Arrow body
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(-18, -4, 36, 8);
+
+    // Arrow head
+    ctx.beginPath();
+    ctx.moveTo(18, 0);
+    ctx.lineTo(6, -10);
+    ctx.lineTo(6, 10);
+    ctx.closePath();
+    ctx.fillStyle = '#ff4444';
+    ctx.fill();
+
+    // Trail/glow
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = 'rgba(255, 180, 180, 0.7)';
+    ctx.fillRect(-30, -6, 24, 12);
+
+    ctx.restore();
   });
 
   ctx.restore();
 
-  // Minimap (unchanged from previous working version)
+  // Minimap
   mctx.clearRect(0, 0, minimap.width, minimap.height);
   mctx.fillStyle = '#228B22';
   mctx.fillRect(0, 0, minimap.width, minimap.height);
@@ -389,7 +401,7 @@ function gameLoop(time = performance.now()) {
   mctx.lineWidth = 2;
   mctx.strokeRect(vx, vy, canvas.width * sx, canvas.height * sy);
 
-  // Update UI
+  // UI bars & inventory
   if (players[myId]) {
     const hp = players[myId].health ?? 100;
     healthText.textContent = `Health: ${Math.floor(hp)}/100`;
@@ -416,7 +428,6 @@ socket.on('currentState', data => {
   projectiles.length = 0;
   projectiles.push(...(data.projectiles || []));
   myId = data.myId;
-  console.log('Joined - myId:', myId);
 });
 
 socket.on('playerJoined', data => {
@@ -445,9 +456,7 @@ socket.on('bowPickedUp', data => {
   bows = bows.filter(b => b.id !== data.bowId);
 });
 
-socket.on('projectileFired', proj => {
-  projectiles.push(proj);
-});
+socket.on('projectileFired', proj => projectiles.push(proj));
 
 socket.on('projectilesUpdate', projs => {
   projectiles.length = 0;
@@ -462,6 +471,4 @@ socket.on('chatMessage', data => {
   }
 });
 
-socket.on('playerDisconnected', id => {
-  delete players[id];
-});
+socket.on('playerDisconnected', id => delete players[id]);
