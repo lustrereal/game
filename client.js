@@ -1,8 +1,8 @@
-// client.js - FULL FILE (fixed page switch after login + sidebar navigation)
+// client.js - FULL FILE
 
 const socket = io({ autoConnect: false });
 
-// DOM elements with null checks
+// DOM elements
 const authScreen = document.getElementById('authScreen');
 const modeSelect = document.getElementById('modeSelect');
 const homeScreen = document.getElementById('homeScreen');
@@ -16,8 +16,6 @@ const authMessage = document.getElementById('authMessage');
 const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
-
-// Game elements
 const canvas = document.getElementById('canvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 const minimap = document.getElementById('minimap');
@@ -42,6 +40,26 @@ let currentUsername = null;
 let currentMode = null;
 let currentScreen = 'auth';
 
+const players = {};
+const bows = [];
+const projectiles = [];
+let myId = null;
+let cameraX = 0;
+let cameraY = 0;
+
+const movement = { up: false, down: false, left: false, right: false };
+const baseSpeed = 5;
+const sprintSpeed = 10;
+let sprinting = false;
+let stamina = 100;
+const maxStamina = 100;
+const staminaDrainRate = 25;
+const staminaRegenRate = 15;
+
+let mouseX = 0;
+let mouseY = 0;
+let lastDirection = { x: 1, y: 0 };
+
 // ────────────────────────────────────────────────
 // Persistent login (localStorage)
 // ────────────────────────────────────────────────
@@ -61,9 +79,8 @@ function loadLogin() {
     if (profileUsername) profileUsername.textContent = currentUsername;
     if (authScreen) authScreen.style.display = 'none';
     if (homeScreen) homeScreen.style.display = 'flex';
-    socket.io.opts.auth = { token: authToken };
+    socket.io.opts.auth = { token };
     socket.connect();
-    showPage('home');
     return true;
   }
   return false;
@@ -71,7 +88,7 @@ function loadLogin() {
 
 // Auto-login on page load
 if (loadLogin()) {
-  console.log('Auto-login successful - showing home');
+  showPage('home');
 } else if (authScreen) {
   showPage('auth');
 }
@@ -80,7 +97,7 @@ if (loadLogin()) {
 // Login / Register
 // ────────────────────────────────────────────────
 
-if (loginBtn) loginBtn.addEventListener('click', async () => {
+loginBtn.addEventListener('click', async () => {
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
@@ -90,7 +107,6 @@ if (loginBtn) loginBtn.addEventListener('click', async () => {
   }
 
   if (authMessage) authMessage.textContent = 'Logging in...';
-  console.log('Login attempt:', username);
 
   try {
     const res = await fetch('/login', {
@@ -99,10 +115,7 @@ if (loginBtn) loginBtn.addEventListener('click', async () => {
       body: JSON.stringify({ username, password })
     });
 
-    console.log('Login response status:', res.status);
-
     const data = await res.json();
-    console.log('Login response:', data);
 
     if (!res.ok) throw new Error(data.error || 'Login failed');
 
@@ -121,16 +134,13 @@ if (loginBtn) loginBtn.addEventListener('click', async () => {
     socket.io.opts.auth = { token: authToken };
     socket.connect();
 
-    // Force page switch
     showPage('home');
-    console.log('Login success - switched to home');
   } catch (err) {
     if (authMessage) authMessage.textContent = err.message;
-    console.error('Login error:', err);
   }
 });
 
-if (registerBtn) registerBtn.addEventListener('click', async () => {
+registerBtn.addEventListener('click', async () => {
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
@@ -145,7 +155,6 @@ if (registerBtn) registerBtn.addEventListener('click', async () => {
   }
 
   if (authMessage) authMessage.textContent = 'Registering...';
-  console.log('Register attempt:', username);
 
   try {
     const res = await fetch('/register', {
@@ -154,10 +163,7 @@ if (registerBtn) registerBtn.addEventListener('click', async () => {
       body: JSON.stringify({ username, password })
     });
 
-    console.log('Register response status:', res.status);
-
     const data = await res.json();
-    console.log('Register response:', data);
 
     if (!res.ok) throw new Error(data.error || 'Registration failed');
 
@@ -176,12 +182,9 @@ if (registerBtn) registerBtn.addEventListener('click', async () => {
     socket.io.opts.auth = { token: authToken };
     socket.connect();
 
-    // Force page switch
     showPage('home');
-    console.log('Register success - switched to home');
   } catch (err) {
     if (authMessage) authMessage.textContent = err.message;
-    console.error('Register error:', err);
   }
 });
 
@@ -190,8 +193,6 @@ if (registerBtn) registerBtn.addEventListener('click', async () => {
 // ────────────────────────────────────────────────
 
 function showPage(page) {
-  console.log('Switching to page:', page);
-
   const pages = {
     auth: authScreen,
     home: homeScreen,
@@ -204,22 +205,16 @@ function showPage(page) {
   });
 
   const target = pages[page];
-  if (target) {
-    target.style.display = 'flex';
-    console.log('Displayed page:', page);
-  } else {
-    console.warn('Page not found:', page);
-  }
+  if (target) target.style.display = 'flex';
 
   sidebarButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
   });
 
-  currentScreen = page;
   window.location.hash = page;
 }
 
-// Handle hash change
+// Hash change support
 window.addEventListener('hashchange', () => {
   const hash = window.location.hash.slice(1) || 'home';
   showPage(hash);
@@ -241,13 +236,13 @@ showPage(initialPage);
 // Chat
 // ────────────────────────────────────────────────
 
-if (sendBtn) sendBtn.addEventListener('click', sendChatMessage);
-if (chatInput) chatInput.addEventListener('keypress', e => {
+sendBtn.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keypress', e => {
   if (e.key === 'Enter') sendChatMessage();
 });
 
 function sendChatMessage() {
-  const message = chatInput?.value?.trim();
+  const message = chatInput.value.trim();
   if (message) {
     socket.emit('chatMessage', { message });
     chatInput.value = '';
@@ -258,24 +253,22 @@ function sendChatMessage() {
 // Mouse & click for shooting
 // ────────────────────────────────────────────────
 
-if (canvas) {
-  canvas.addEventListener('mousemove', e => {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = e.clientX - rect.left + cameraX;
-    mouseY = e.clientY - rect.top + cameraY;
-  });
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseX = e.clientX - rect.left + cameraX;
+  mouseY = e.clientY - rect.top + cameraY;
+});
 
-  canvas.addEventListener('click', e => {
-    if (e.button !== 0) return;
-    if (players[myId]?.equipped?.type === 'bow' && currentMode === 'normal') {
-      const p = players[myId];
-      const dx = mouseX - (p.x + 25);
-      const dy = mouseY - (p.y + 25);
-      const angle = Math.atan2(dy, dx);
-      socket.emit('shoot', { angle });
-    }
-  });
-}
+canvas.addEventListener('click', e => {
+  if (e.button !== 0) return;
+  if (players[myId]?.equipped?.type === 'bow' && currentMode === 'normal') {
+    const p = players[myId];
+    const dx = mouseX - (p.x + 25);
+    const dy = mouseY - (p.y + 25);
+    const angle = Math.atan2(dy, dx);
+    socket.emit('shoot', { angle });
+  }
+});
 
 // ────────────────────────────────────────────────
 // Keyboard controls
@@ -639,7 +632,6 @@ socket.on('currentState', data => {
   projectiles.length = 0;
   projectiles.push(...(data.projectiles || []));
   myId = data.myId;
-  console.log('Received current state - myId:', myId);
 });
 
 socket.on('playerJoined', data => {
