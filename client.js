@@ -1,10 +1,9 @@
-// client.js - FULL FILE (updated with auth + sidebar + editor)
+// client.js - FULL FILE (with persistent login + working buttons)
 
-const socket = io({ autoConnect: false }); // Connect only after login
+const socket = io({ autoConnect: false });
 
 // DOM elements
 const authScreen = document.getElementById('authScreen');
-const modeSelect = document.getElementById('modeSelect');
 const homeScreen = document.getElementById('homeScreen');
 const editorScreen = document.getElementById('editorScreen');
 const gameDiv = document.getElementById('game');
@@ -17,21 +16,9 @@ const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
 
-// Game elements
+// Game elements (add your canvas/chat/inventory/etc. IDs here if missing)
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const minimap = document.getElementById('minimap');
-const mctx = minimap.getContext('2d');
-const chatInput = document.getElementById('chatInput');
-const sendBtn = document.getElementById('sendBtn');
-const messagesUl = document.getElementById('messages');
-const slotsDiv = document.getElementById('slots');
-const healthText = document.getElementById('healthText');
-const healthBar = document.getElementById('healthBar');
-const staminaText = document.getElementById('staminaText');
-const staminaBar = document.getElementById('staminaBar');
-const playersList = document.getElementById('playersList');
-const playerListUl = document.getElementById('playerListUl');
+const ctx = canvas ? canvas.getContext('2d') : null;
 
 // Constants
 const WORLD_WIDTH = 3000;
@@ -39,31 +26,58 @@ const WORLD_HEIGHT = 2000;
 
 let authToken = null;
 let currentUsername = null;
-let currentMode = null;
-let currentScreen = 'home';
-
-const players = {};
-const bows = [];
-const projectiles = [];
-let myId = null;
-let cameraX = 0;
-let cameraY = 0;
-
-const movement = { up: false, down: false, left: false, right: false };
-const baseSpeed = 5;
-const sprintSpeed = 10;
-let sprinting = false;
-let stamina = 100;
-const maxStamina = 100;
-const staminaDrainRate = 25;
-const staminaRegenRate = 15;
-
-let mouseX = 0;
-let mouseY = 0;
-let lastDirection = { x: 1, y: 0 };
+let currentScreen = 'auth';
 
 // ────────────────────────────────────────────────
-// Auth
+// Persistent login (localStorage)
+// ────────────────────────────────────────────────
+
+function saveLogin(token, username) {
+  localStorage.setItem('authToken', token);
+  localStorage.setItem('username', username);
+}
+
+function loadLogin() {
+  const token = localStorage.getItem('authToken');
+  const username = localStorage.getItem('username');
+  if (token && username) {
+    authToken = token;
+    currentUsername = username;
+    displayUsername.textContent = currentUsername;
+    profileUsername.textContent = currentUsername;
+    authScreen.style.display = 'none';
+    homeScreen.style.display = 'flex';
+    socket.io.opts.auth = { token: authToken };
+    socket.connect();
+    return true;
+  }
+  return false;
+}
+
+function logout() {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('username');
+  authToken = null;
+  currentUsername = null;
+  authScreen.style.display = 'flex';
+  homeScreen.style.display = 'none';
+  editorScreen.style.display = 'none';
+  socket.disconnect();
+}
+
+// Auto-login on page load
+window.addEventListener('load', () => {
+  if (loadLogin()) {
+    // Already logged in → go to home
+    showPage('home');
+  } else {
+    // Show login screen
+    showPage('auth');
+  }
+});
+
+// ────────────────────────────────────────────────
+// Login / Register
 // ────────────────────────────────────────────────
 
 loginBtn.addEventListener('click', async () => {
@@ -75,6 +89,7 @@ loginBtn.addEventListener('click', async () => {
     return;
   }
 
+  authMessage.textContent = 'Logging in...';
   try {
     const res = await fetch('/login', {
       method: 'POST',
@@ -89,6 +104,8 @@ loginBtn.addEventListener('click', async () => {
     authToken = data.token;
     currentUsername = data.username;
 
+    saveLogin(authToken, currentUsername);
+
     displayUsername.textContent = currentUsername;
     profileUsername.textContent = currentUsername;
 
@@ -100,6 +117,7 @@ loginBtn.addEventListener('click', async () => {
     socket.connect();
   } catch (err) {
     authMessage.textContent = err.message;
+    console.error('Login error:', err);
   }
 });
 
@@ -117,6 +135,7 @@ registerBtn.addEventListener('click', async () => {
     return;
   }
 
+  authMessage.textContent = 'Registering...';
   try {
     const res = await fetch('/register', {
       method: 'POST',
@@ -131,6 +150,8 @@ registerBtn.addEventListener('click', async () => {
     authToken = data.token;
     currentUsername = data.username;
 
+    saveLogin(authToken, currentUsername);
+
     displayUsername.textContent = currentUsername;
     profileUsername.textContent = currentUsername;
 
@@ -142,32 +163,57 @@ registerBtn.addEventListener('click', async () => {
     socket.connect();
   } catch (err) {
     authMessage.textContent = err.message;
+    console.error('Register error:', err);
   }
 });
 
 // ────────────────────────────────────────────────
-// Sidebar navigation
+// Sidebar navigation (hash routing)
 // ────────────────────────────────────────────────
 
+function showPage(page) {
+  const pages = {
+    auth: authScreen,
+    home: homeScreen,
+    editor: editorScreen,
+    game: gameDiv
+    // Add more pages here when you create them
+  };
+
+  Object.values(pages).forEach(el => {
+    if (el) el.style.display = 'none';
+  });
+
+  if (pages[page]) {
+    pages[page].style.display = 'flex';
+  }
+
+  // Update active button
+  sidebarButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
+
+  currentScreen = page;
+  window.location.hash = page;
+}
+
+// Handle hash change (back/forward button)
+window.addEventListener('hashchange', () => {
+  const hash = window.location.hash.slice(1) || 'home';
+  showPage(hash);
+});
+
+// Sidebar clicks
 sidebarButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    const target = btn.dataset.screen;
-
-    // Hide all screens
-    [authScreen, modeSelect, homeScreen, editorScreen, gameDiv].forEach(el => {
-      if (el) el.style.display = 'none';
-    });
-
-    // Show target screen
-    if (target === 'home') homeScreen.style.display = 'flex';
-    if (target === 'editor') editorScreen.style.display = 'flex';
-    // Add more later: discover, friends, chat, settings, game
-
-    // Active button style
-    sidebarButtons.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    const page = btn.dataset.page;
+    showPage(page);
   });
 });
+
+// Initial load
+const initialPage = window.location.hash.slice(1) || (authToken ? 'home' : 'auth');
+showPage(initialPage);
 
 // ────────────────────────────────────────────────
 // Chat
