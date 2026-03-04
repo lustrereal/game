@@ -15,23 +15,35 @@ const io = socketIo(server, {
 });
 
 // ────────────────────────────────────────────────
-// Constants — moved to top so they are defined before use
+// Important: Trust Render's proxy to fix X-Forwarded-For error
 // ────────────────────────────────────────────────
-const WORLD_WIDTH = 3000;
-const WORLD_HEIGHT = 2000;
+app.set('trust proxy', 1);
 
 // Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname)); // Serve index.html, client.js, etc.
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  trustProxy: true // Required for Render
+}));
 
 // MongoDB connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://29jonec5_db_user:<db_password>@msg.ba6sfeu.mongodb.net/?appName=MSG';
+const MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+  console.error('MONGO_URI environment variable is not set!');
+  process.exit(1);
+}
+
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .then(() => console.log('MongoDB connected successfully'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 // User model
 const userSchema = new mongoose.Schema({
@@ -42,18 +54,23 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 // JWT secret
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-this-in-production-987654321';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('JWT_SECRET environment variable is not set!');
+  process.exit(1);
+}
 
+// ────────────────────────────────────────────────
 // Register route
+// ────────────────────────────────────────────────
 app.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     const existing = await User.findOne({ username });
-    if (existing) return res.status(400).json({ error: 'Username taken' });
+    if (existing) return res.status(400).json({ error: 'Username already taken' });
 
     const hashed = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashed });
@@ -62,30 +79,34 @@ app.post('/register', async (req, res) => {
     const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, username });
   } catch (err) {
-    console.error(err);
+    console.error('Register error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
+// ────────────────────────────────────────────────
 // Login route
+// ────────────────────────────────────────────────
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ error: 'Invalid username or password' });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!match) return res.status(401).json({ error: 'Invalid username or password' });
 
     const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, username });
   } catch (err) {
-    console.error(err);
+    console.error('Login error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
+// ────────────────────────────────────────────────
 // Game state
+// ────────────────────────────────────────────────
 const players = {};
 const bows = [];
 const projectiles = [];
@@ -120,24 +141,30 @@ function resetTagMode() {
     }
   });
 
-  console.log('Tag mode reset — new tagger chosen');
+  console.log('Tag mode reset - new tagger chosen');
 }
 
+// ────────────────────────────────────────────────
+// Socket authentication middleware
+// ────────────────────────────────────────────────
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) return next(new Error('Authentication required'));
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    socket.user = decoded;
+    socket.user = decoded; // { id, username }
     next();
   } catch (err) {
-    next(new Error('Invalid token'));
+    next(new Error('Invalid or expired token'));
   }
 });
 
+// ────────────────────────────────────────────────
+// Socket connection
+// ────────────────────────────────────────────────
 io.on('connection', (socket) => {
-  console.log(`Authenticated user connected: ${socket.user?.username || 'unknown'} (${socket.id})`);
+  console.log(`Authenticated user connected: ${socket.user.username} (${socket.id})`);
 
   socket.on('join', (data) => {
     const mode = data.mode || 'normal';
@@ -183,6 +210,7 @@ io.on('connection', (socket) => {
     p.x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
     p.y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
 
+    // Tag mode collision tagging
     if (p.mode === 'tag') {
       let tagged = false;
       for (const otherId in players) {
@@ -228,7 +256,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Normal mode only
+  // Normal mode only features
   socket.on('pickupBow', (bowId) => {
     const p = players[socket.id];
     if (!p || p.mode !== 'normal') return;
@@ -306,7 +334,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Projectile loop
+// Projectile physics loop
 setInterval(() => {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
