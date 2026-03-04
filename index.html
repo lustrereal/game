@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Square Game</title>
+  <title>Multiplayer Square Game</title>
   <style>
     body {
       margin: 0;
@@ -16,7 +16,7 @@
       display: flex;
     }
 
-    /* Sidebar */
+    /* Sidebar – persistent */
     .sidebar {
       width: 80px;
       background: #1e293b;
@@ -56,13 +56,14 @@
       box-shadow: 0 0 15px rgba(100, 116, 139, 0.6);
     }
 
-    /* Main content */
+    /* Main content area */
     .main-content {
       flex: 1;
       position: relative;
       overflow: hidden;
     }
 
+    /* Page containers */
     .page {
       position: absolute;
       inset: 0;
@@ -81,6 +82,7 @@
     /* Auth page */
     #authPage {
       background: rgba(0,0,0,0.85);
+      z-index: 400;
     }
 
     #authPage input {
@@ -115,9 +117,7 @@
       margin-bottom: 20px;
     }
 
-    .username {
-      color: #a5b4fc;
-    }
+    .username { color: #a5b4fc; }
 
     /* Profile top-right */
     .profile {
@@ -133,10 +133,7 @@
       z-index: 200;
     }
 
-    .profile-username {
-      font-size: 18px;
-      font-weight: bold;
-    }
+    .profile-username { font-size: 18px; font-weight: bold; }
 
     .profile-pic {
       width: 48px;
@@ -179,9 +176,7 @@
       cursor: pointer;
     }
 
-    .editor-tools button:hover {
-      background: #64748b;
-    }
+    .editor-tools button:hover { background: #64748b; }
 
     .editor-canvas-container {
       width: 100%;
@@ -197,11 +192,7 @@
       background: #228B22;
     }
 
-    #canvas {
-      display: block;
-      margin: 0 auto;
-      border: 2px solid #333;
-    }
+    #canvas { display: block; margin: 0 auto; border: 2px solid #333; }
   </style>
 </head>
 <body>
@@ -216,10 +207,10 @@
     <button data-page="editor">Editor</button>
   </div>
 
-  <!-- Main content wrapper -->
+  <!-- Pages -->
   <div class="main-content">
 
-    <!-- Auth page -->
+    <!-- Auth -->
     <div id="authPage" class="page active">
       <h1>Multiplayer Square Game</h1>
       <input id="username" placeholder="Username" required minlength="3" maxlength="20">
@@ -229,7 +220,7 @@
       <p id="authMessage"></p>
     </div>
 
-    <!-- Home page -->
+    <!-- Home -->
     <div id="homePage" class="page">
       <div class="main">
         <h1 class="greeting">
@@ -243,7 +234,7 @@
       </div>
     </div>
 
-    <!-- Editor page -->
+    <!-- Editor -->
     <div id="editorPage" class="page">
       <div class="editor-header">
         <h1>Map & Game Editor</h1>
@@ -257,12 +248,16 @@
       <div class="editor-canvas-container">
         <canvas id="editorGrid"></canvas>
       </div>
+
+      <p style="text-align:center; margin-top:10px; color:#94a3b8;">
+        Click tiles to place blocks • Save your map • Publish when ready
+      </p>
     </div>
 
-    <!-- Game page (placeholder) -->
+    <!-- Game (placeholder) -->
     <div id="gamePage" class="page">
       <canvas id="canvas" width="960" height="720"></canvas>
-      <!-- Add chat, inventory, bars, etc. here when ready -->
+      <!-- Chat, inventory, bars, etc. can go here -->
     </div>
 
   </div>
