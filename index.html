@@ -9,14 +9,14 @@
       margin: 0;
       padding: 0;
       height: 100vh;
-      background: #2c3e50; /* Dark gray from your screenshot */
+      background: #2c3e50;
       color: white;
       font-family: Arial, Helvetica, sans-serif;
       overflow: hidden;
       display: flex;
     }
 
-    /* Left Sidebar */
+    /* Sidebar */
     .sidebar {
       width: 80px;
       background: #1e293b;
@@ -49,7 +49,7 @@
       transform: scale(1.1);
     }
 
-    /* Main Content Area */
+    /* Main content */
     .main {
       flex: 1;
       display: flex;
@@ -69,7 +69,7 @@
       color: #a5b4fc;
     }
 
-    /* Top-right Profile */
+    /* Profile top-right */
     .profile {
       position: absolute;
       top: 20px;
@@ -100,15 +100,69 @@
       font-weight: bold;
     }
 
-    /* Hide game elements for now */
-    #game, #canvas, #minimap, #chat, #inventory, #uiBars {
+    /* Auth screen */
+    #authScreen {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+    }
+
+    #authScreen input {
+      margin: 12px;
+      padding: 14px;
+      width: 300px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #666;
+      background: #1e293b;
+      color: white;
+    }
+
+    #authScreen button {
+      margin: 10px;
+      padding: 14px 40px;
+      font-size: 18px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #loginBtn { background: #4CAF50; color: white; }
+    #registerBtn { background: #2196F3; color: white; }
+
+    #authMessage { color: #ff6b6b; margin-top: 10px; min-height: 24px; }
+
+    /* Hide other screens initially */
+    #modeSelect, #game {
       display: none;
     }
   </style>
 </head>
 <body>
 
-  <!-- Left Sidebar Navigation -->
+  <!-- Login/Register Screen – shown first -->
+  <div id="authScreen">
+    <h1>Multiplayer Square Game</h1>
+    <input id="username" placeholder="Username" required minlength="3" maxlength="20">
+    <input id="password" type="password" placeholder="Password" required minlength="6">
+    <button id="loginBtn">Login</button>
+    <button id="registerBtn">Register</button>
+    <p id="authMessage"></p>
+  </div>
+
+  <!-- Mode Selection – shown after login -->
+  <div id="modeSelect">
+    <h1>Choose Game Mode</h1>
+    <button id="normalBtn" class="mode-btn">Normal</button>
+    <button id="tagBtn" class="mode-btn">Tag</button>
+  </div>
+
+  <!-- Home Page – shown after mode selection -->
   <div class="sidebar">
     <button>Home</button>
     <button>Friends</button>
@@ -116,23 +170,22 @@
     <button>Settings</button>
   </div>
 
-  <!-- Main Content -->
   <div class="main">
     <h1 class="greeting">
-      Hello, <span class="username">(User)</span>
+      Hello, <span id="displayUsername" class="username">(User)</span>
     </h1>
 
-    <!-- Top-right Profile -->
     <div class="profile">
-      <span class="profile-username">(username)</span>
-      <div class="profile-pic">P</div> <!-- Replace P with actual profile picture later -->
+      <span id="profileUsername" class="profile-username">(username)</span>
+      <div class="profile-pic">P</div>
     </div>
   </div>
 
-  <!-- Game elements (hidden for now) -->
+  <!-- Game content (hidden for now) -->
   <div id="game">
     <canvas id="canvas" width="960" height="720"></canvas>
     <canvas id="minimap" width="180" height="135"></canvas>
+
     <div id="chat">
       <ul id="messages"></ul>
       <div id="playersList" style="display:none;">
@@ -142,10 +195,12 @@
       <input id="chatInput" placeholder="Say something..." maxlength="100">
       <button id="sendBtn">Send</button>
     </div>
+
     <div id="inventory">
       <div>Inventory</div>
       <div id="slots"></div>
     </div>
+
     <div id="uiBars">
       <div class="bar-container">
         <div id="healthText">Health: 100/100</div>
@@ -156,11 +211,6 @@
         <div class="bar-outer"><div id="staminaBar" class="bar-inner" style="width:100%; background:#3498db;"></div></div>
       </div>
     </div>
-  </div>
-
-  <!-- Login screen (hidden for now - will be shown on first load later) -->
-  <div id="authScreen" style="display:none;">
-    <!-- Your login/register form here when ready -->
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
