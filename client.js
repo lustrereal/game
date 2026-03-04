@@ -1,8 +1,8 @@
-// client.js - FULL FILE (fixed page switching after login + sidebar navigation)
+// client.js - FULL FILE (fixed page switch after login + sidebar navigation)
 
 const socket = io({ autoConnect: false });
 
-// DOM elements
+// DOM elements with null checks
 const authScreen = document.getElementById('authScreen');
 const modeSelect = document.getElementById('modeSelect');
 const homeScreen = document.getElementById('homeScreen');
@@ -40,6 +40,7 @@ const WORLD_HEIGHT = 2000;
 let authToken = null;
 let currentUsername = null;
 let currentMode = null;
+let currentScreen = 'auth';
 
 // ────────────────────────────────────────────────
 // Persistent login (localStorage)
@@ -62,26 +63,24 @@ function loadLogin() {
     if (homeScreen) homeScreen.style.display = 'flex';
     socket.io.opts.auth = { token: authToken };
     socket.connect();
+    showPage('home');
     return true;
   }
   return false;
 }
 
 // Auto-login on page load
-window.addEventListener('load', () => {
-  if (loadLogin()) {
-    // Already logged in → go to home
-    showPage('home');
-  } else if (authScreen) {
-    showPage('auth');
-  }
-});
+if (loadLogin()) {
+  console.log('Auto-login successful - showing home');
+} else if (authScreen) {
+  showPage('auth');
+}
 
 // ────────────────────────────────────────────────
 // Login / Register
 // ────────────────────────────────────────────────
 
-loginBtn.addEventListener('click', async () => {
+if (loginBtn) loginBtn.addEventListener('click', async () => {
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
@@ -91,6 +90,8 @@ loginBtn.addEventListener('click', async () => {
   }
 
   if (authMessage) authMessage.textContent = 'Logging in...';
+  console.log('Login attempt:', username);
+
   try {
     const res = await fetch('/login', {
       method: 'POST',
@@ -98,7 +99,10 @@ loginBtn.addEventListener('click', async () => {
       body: JSON.stringify({ username, password })
     });
 
+    console.log('Login response status:', res.status);
+
     const data = await res.json();
+    console.log('Login response:', data);
 
     if (!res.ok) throw new Error(data.error || 'Login failed');
 
@@ -117,15 +121,16 @@ loginBtn.addEventListener('click', async () => {
     socket.io.opts.auth = { token: authToken };
     socket.connect();
 
-    // Force switch to home page after login
+    // Force page switch
     showPage('home');
+    console.log('Login success - switched to home');
   } catch (err) {
     if (authMessage) authMessage.textContent = err.message;
     console.error('Login error:', err);
   }
 });
 
-registerBtn.addEventListener('click', async () => {
+if (registerBtn) registerBtn.addEventListener('click', async () => {
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
@@ -140,6 +145,8 @@ registerBtn.addEventListener('click', async () => {
   }
 
   if (authMessage) authMessage.textContent = 'Registering...';
+  console.log('Register attempt:', username);
+
   try {
     const res = await fetch('/register', {
       method: 'POST',
@@ -147,7 +154,10 @@ registerBtn.addEventListener('click', async () => {
       body: JSON.stringify({ username, password })
     });
 
+    console.log('Register response status:', res.status);
+
     const data = await res.json();
+    console.log('Register response:', data);
 
     if (!res.ok) throw new Error(data.error || 'Registration failed');
 
@@ -166,8 +176,9 @@ registerBtn.addEventListener('click', async () => {
     socket.io.opts.auth = { token: authToken };
     socket.connect();
 
-    // Force switch to home page after register
+    // Force page switch
     showPage('home');
+    console.log('Register success - switched to home');
   } catch (err) {
     if (authMessage) authMessage.textContent = err.message;
     console.error('Register error:', err);
@@ -179,6 +190,8 @@ registerBtn.addEventListener('click', async () => {
 // ────────────────────────────────────────────────
 
 function showPage(page) {
+  console.log('Switching to page:', page);
+
   const pages = {
     auth: authScreen,
     home: homeScreen,
@@ -191,7 +204,12 @@ function showPage(page) {
   });
 
   const target = pages[page];
-  if (target) target.style.display = 'flex';
+  if (target) {
+    target.style.display = 'flex';
+    console.log('Displayed page:', page);
+  } else {
+    console.warn('Page not found:', page);
+  }
 
   sidebarButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === page);
@@ -201,7 +219,7 @@ function showPage(page) {
   window.location.hash = page;
 }
 
-// Handle hash change (back/forward)
+// Handle hash change
 window.addEventListener('hashchange', () => {
   const hash = window.location.hash.slice(1) || 'home';
   showPage(hash);
@@ -621,6 +639,7 @@ socket.on('currentState', data => {
   projectiles.length = 0;
   projectiles.push(...(data.projectiles || []));
   myId = data.myId;
+  console.log('Received current state - myId:', myId);
 });
 
 socket.on('playerJoined', data => {
@@ -669,3 +688,134 @@ socket.on('chatMessage', data => {
 socket.on('playerDisconnected', id => {
   delete players[id];
 });
+
+// ────────────────────────────────────────────────
+// Inventory & player list helpers
+// ────────────────────────────────────────────────
+
+function updateInventoryUI() {
+  if (currentMode !== 'normal' || !players[myId] || !slotsDiv) return;
+  slotsDiv.innerHTML = '';
+  players[myId].inventory.forEach((item, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    if (players[myId].equipped === item) slot.classList.add('selected');
+
+    const mini = document.createElement('canvas');
+    mini.width = 48; mini.height = 48;
+    const mctx = mini.getContext('2d');
+    drawBowIcon(mctx, 24, 24, 36);
+    if (item.type === 'bow') {
+      mctx.fillStyle = 'white';
+      mctx.font = 'bold 12px Arial';
+      mctx.fillText(`${item.uses}/5`, 4, 42);
+    }
+    slot.appendChild(mini);
+
+    slot.onclick = () => socket.emit('equipItem', i);
+    slotsDiv.appendChild(slot);
+  });
+}
+
+function updatePlayersList() {
+  if (currentMode !== 'tag' || !playersList || !playerListUl) return;
+  playersList.style.display = 'block';
+  playerListUl.innerHTML = '';
+  Object.values(players).forEach(p => {
+    if (!p.role) return;
+    const li = document.createElement('li');
+    li.textContent = `${p.name} (${p.role})`;
+    li.className = p.role === 'tagger' ? 'tagger' : 'runner';
+    playerListUl.appendChild(li);
+  });
+}
+
+// ────────────────────────────────────────────────
+// Drawing functions
+// ────────────────────────────────────────────────
+
+function drawBowIcon(ctx, cx, cy, size) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(size / 64, size / 64);
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(-6, -24, 12, 48);
+  ctx.fillRect(-20, -8, 40, 16);
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-16, -12);
+  ctx.lineTo(16, 12);
+  ctx.stroke();
+  ctx.fillStyle = '#ccc';
+  ctx.fillRect(-4, -28, 8, 8);
+  ctx.restore();
+}
+
+function drawEquipped(player) {
+  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal' || !ctx) return;
+  ctx.save();
+  ctx.translate(player.x + 25, player.y + 25);
+
+  let angle = Math.atan2(mouseY - (player.y + 25), mouseX - (player.x + 25));
+  if (Math.hypot(mouseX - (player.x + 25), mouseY - (player.y + 25)) < 30) {
+    angle = Math.atan2(lastDirection.y, lastDirection.x);
+  }
+
+  ctx.rotate(angle);
+  drawBowIcon(ctx, 0, 0, 64);
+  ctx.restore();
+}
+
+function drawName(x, y, name) {
+  if (!ctx) return;
+  ctx.save();
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'white';
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 3;
+  ctx.strokeText(name, x, y - 55);
+  ctx.fillText(name, x, y - 55);
+  ctx.restore();
+}
+
+function drawBubble(x, y, text, color) {
+  if (!ctx) return;
+  ctx.save();
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  let displayText = text;
+  const maxWidth = 180;
+  const padding = 10;
+  while (ctx.measureText(displayText).width > maxWidth - 2 * padding && displayText.length > 3) {
+    displayText = displayText.slice(0, -1);
+  }
+  if (displayText.length < text.length) displayText += '...';
+
+  const metrics = ctx.measureText(displayText);
+  const w = Math.max(60, metrics.width + 2 * padding);
+  const h = 28;
+  const by = y - h - 12;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillRect(x - w/2, by, w, h);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - w/2, by, w, h);
+
+  ctx.beginPath();
+  ctx.moveTo(x - 6, by + h);
+  ctx.lineTo(x + 6, by + h);
+  ctx.lineTo(x, y - 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#222';
+  ctx.fillText(displayText, x, by + h/2);
+  ctx.restore();
+}
