@@ -1,4 +1,4 @@
-// client.js - FULL FILE
+// client.js - FULL FILE (updated with auth + sidebar + editor)
 
 const socket = io({ autoConnect: false }); // Connect only after login
 
@@ -16,6 +16,8 @@ const authMessage = document.getElementById('authMessage');
 const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
+
+// Game elements
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const minimap = document.getElementById('minimap');
@@ -657,4 +659,92 @@ function updatePlayersList() {
     li.className = p.role === 'tagger' ? 'tagger' : 'runner';
     playerListUl.appendChild(li);
   });
+}
+
+// ────────────────────────────────────────────────
+// Drawing functions
+// ────────────────────────────────────────────────
+
+function drawBowIcon(ctx, cx, cy, size) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(size / 64, size / 64);
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(-6, -24, 12, 48);
+  ctx.fillRect(-20, -8, 40, 16);
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-16, -12);
+  ctx.lineTo(16, 12);
+  ctx.stroke();
+  ctx.fillStyle = '#ccc';
+  ctx.fillRect(-4, -28, 8, 8);
+  ctx.restore();
+}
+
+function drawEquipped(player) {
+  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal') return;
+  ctx.save();
+  ctx.translate(player.x + 25, player.y + 25);
+
+  let angle = Math.atan2(mouseY - (player.y + 25), mouseX - (player.x + 25));
+  if (Math.hypot(mouseX - (player.x + 25), mouseY - (player.y + 25)) < 30) {
+    angle = Math.atan2(lastDirection.y, lastDirection.x);
+  }
+
+  ctx.rotate(angle);
+  drawBowIcon(ctx, 0, 0, 64);
+  ctx.restore();
+}
+
+function drawName(x, y, name) {
+  ctx.save();
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = 'white';
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 3;
+  ctx.strokeText(name, x, y - 55);
+  ctx.fillText(name, x, y - 55);
+  ctx.restore();
+}
+
+function drawBubble(x, y, text, color) {
+  ctx.save();
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  let displayText = text;
+  const maxWidth = 180;
+  const padding = 10;
+  while (ctx.measureText(displayText).width > maxWidth - 2 * padding && displayText.length > 3) {
+    displayText = displayText.slice(0, -1);
+  }
+  if (displayText.length < text.length) displayText += '...';
+
+  const metrics = ctx.measureText(displayText);
+  const w = Math.max(60, metrics.width + 2 * padding);
+  const h = 28;
+  const by = y - h - 12;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fillRect(x - w/2, by, w, h);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - w/2, by, w, h);
+
+  ctx.beginPath();
+  ctx.moveTo(x - 6, by + h);
+  ctx.lineTo(x + 6, by + h);
+  ctx.lineTo(x, y - 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#222';
+  ctx.fillText(displayText, x, by + h/2);
+  ctx.restore();
 }
