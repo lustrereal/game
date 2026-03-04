@@ -14,18 +14,24 @@ const io = socketIo(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
+// ────────────────────────────────────────────────
+// Constants — moved to top so they are defined before use
+// ────────────────────────────────────────────────
+const WORLD_WIDTH = 3000;
+const WORLD_HEIGHT = 2000;
+
 // Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // Serve client files (index.html, client.js, etc.)
+app.use(express.static(__dirname));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
-// MongoDB connection (use Render env var or hardcode for local testing)
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@cluster0.xxx.mongodb.net/squaregame?retryWrites=true&w=majority';
+// MongoDB connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://YOUR_USER:YOUR_PASS@cluster0.xxx.mongodb.net/squaregame?retryWrites=true&w=majority';
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB error:', err));
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // User model
 const userSchema = new mongoose.Schema({
@@ -35,14 +41,15 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// JWT secret (CHANGE THIS in production – use env var)
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-CHANGE-ME-987654321';
+// JWT secret
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-this-in-production-987654321';
 
-// Register
+// Register route
 app.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     const existing = await User.findOne({ username });
@@ -60,35 +67,21 @@ app.post('/register', async (req, res) => {
   }
 });
 
-// Login
+// Login route
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     const user = await User.findOne({ username });
-    if (!user) return res.status(401).json({ error: 'Invalid username or password' });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: 'Invalid username or password' });
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
     const token = jwt.sign({ id: user._id, username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, username });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Socket auth middleware
-io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  if (!token) return next(new Error('Authentication required'));
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    socket.user = decoded; // { id, username }
-    next();
-  } catch (err) {
-    next(new Error('Invalid or expired token'));
   }
 });
 
@@ -127,11 +120,24 @@ function resetTagMode() {
     }
   });
 
-  console.log('Tag mode reset - new tagger chosen');
+  console.log('Tag mode reset — new tagger chosen');
 }
 
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) return next(new Error('Authentication required'));
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.user = decoded;
+    next();
+  } catch (err) {
+    next(new Error('Invalid token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  console.log(`Authenticated user: ${socket.user.username} (${socket.id})`);
+  console.log(`Authenticated user connected: ${socket.user?.username || 'unknown'} (${socket.id})`);
 
   socket.on('join', (data) => {
     const mode = data.mode || 'normal';
@@ -177,7 +183,6 @@ io.on('connection', (socket) => {
     p.x = Math.max(0, Math.min(WORLD_WIDTH - 50, data.x));
     p.y = Math.max(0, Math.min(WORLD_HEIGHT - 50, data.y));
 
-    // Tag mode collision tagging
     if (p.mode === 'tag') {
       let tagged = false;
       for (const otherId in players) {
@@ -201,7 +206,6 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Reset tag mode if all are taggers
       if (tagged) {
         const tagPlayers = Object.values(players).filter(pl => pl.mode === 'tag');
         if (tagPlayers.every(pl => pl.role === 'tagger')) {
@@ -224,23 +228,76 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Normal mode only – ignore in tag
+  // Normal mode only
   socket.on('pickupBow', (bowId) => {
     const p = players[socket.id];
     if (!p || p.mode !== 'normal') return;
-    // ... (your existing pickup logic)
+    const bowIndex = bows.findIndex(b => b.id === bowId);
+    if (bowIndex === -1) return;
+
+    const bow = bows[bowIndex];
+    const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
+
+    if (dist < 80 && p.inventory.length < 3) {
+      p.inventory.push({ type: 'bow', uses: 5 });
+      bows.splice(bowIndex, 1);
+      io.emit('bowPickedUp', { bowId });
+      io.emit('playerUpdate', {
+        id: socket.id,
+        inventory: p.inventory,
+        equipped: p.equipped
+      });
+    }
   });
 
   socket.on('equipItem', (slotIndex) => {
     const p = players[socket.id];
     if (!p || p.mode !== 'normal') return;
-    // ... (your existing equip logic)
+    if (slotIndex >= 0 && slotIndex < p.inventory.length) {
+      p.equipped = p.inventory[slotIndex];
+    } else {
+      p.equipped = null;
+    }
+    io.emit('playerUpdate', {
+      id: socket.id,
+      inventory: p.inventory,
+      equipped: p.equipped
+    });
   });
 
   socket.on('shoot', (data) => {
     const p = players[socket.id];
     if (!p || p.mode !== 'normal') return;
-    // ... (your existing shoot logic)
+    if (!p.equipped || p.equipped.type !== 'bow') return;
+    if (Date.now() - p.lastShot < 3000) return;
+
+    p.lastShot = Date.now();
+    p.equipped.uses--;
+
+    if (p.equipped.uses <= 0) {
+      p.equipped = null;
+      p.inventory = p.inventory.filter(item => item.uses > 0);
+    }
+
+    const speed = 12;
+    const vx = Math.cos(data.angle) * speed;
+    const vy = Math.sin(data.angle) * speed;
+
+    const proj = {
+      id: projCounter++,
+      x: p.x + 25,
+      y: p.y + 25,
+      vx, vy,
+      ownerId: socket.id
+    };
+
+    projectiles.push(proj);
+    io.emit('projectileFired', proj);
+    io.emit('playerUpdate', {
+      id: socket.id,
+      inventory: p.inventory,
+      equipped: p.equipped
+    });
   });
 
   socket.on('disconnect', () => {
@@ -249,7 +306,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Projectile loop (normal mode only)
+// Projectile loop
 setInterval(() => {
   for (let i = projectiles.length - 1; i >= 0; i--) {
     const proj = projectiles[i];
@@ -257,12 +314,15 @@ setInterval(() => {
     proj.y += proj.vy;
 
     let hit = false;
+
     for (const id in players) {
       if (id === proj.ownerId) continue;
       const p = players[id];
       if (p.mode !== 'normal') continue;
 
-      if (Math.hypot(proj.x - (p.x + 25), proj.y - (p.y + 25)) < 35) {
+      const dx = proj.x - (p.x + 25);
+      const dy = proj.y - (p.y + 25);
+      if (Math.hypot(dx, dy) < 35) {
         p.health = Math.max(0, p.health - 5);
         io.emit('playerHit', { id, health: p.health });
         projectiles.splice(i, 1);
@@ -271,7 +331,10 @@ setInterval(() => {
       }
     }
 
-    if (!hit && (proj.x < -50 || proj.x > WORLD_WIDTH + 50 || proj.y < -50 || proj.y > WORLD_HEIGHT + 50)) {
+    if (!hit && (
+      proj.x < -50 || proj.x > WORLD_WIDTH + 50 ||
+      proj.y < -50 || proj.y > WORLD_HEIGHT + 50
+    )) {
       projectiles.splice(i, 1);
     }
   }
@@ -280,4 +343,6 @@ setInterval(() => {
 }, 50);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
