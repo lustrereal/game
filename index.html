@@ -3,83 +3,149 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Multiplayer Square Game</title>
+  <title>Square Game - Home</title>
   <style>
-    body { margin: 0; background: #f0f0f0; font-family: Arial, sans-serif; overflow: hidden; }
-    #authScreen, #modeSelect {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      background: rgba(255,255,255,0.9); z-index: 300;
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      background: #2c3e50; /* Dark gray from your screenshot */
+      color: white;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+      display: flex;
     }
-    #authScreen h1, #modeSelect h1 { margin-bottom: 30px; }
-    input, select, button {
-      margin: 10px; padding: 12px; width: 280px; font-size: 16px; border-radius: 6px; border: 1px solid #ccc;
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 80px;
+      background: #1e293b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 20px;
+      gap: 40px;
     }
-    button {
-      background: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold;
+
+    .sidebar button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: none;
+      background: #334155;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1.2;
     }
-    button:hover { background: #45a049; }
-    #registerBtn { background: #2196F3; }
-    #registerBtn:hover { background: #1e88e5; }
-    #authMessage { color: red; margin-top: 10px; min-height: 20px; }
-    .mode-btn {
-      padding: 20px 60px; margin: 20px; font-size: 24px; border: none; border-radius: 8px; cursor: pointer; color: white;
+
+    .sidebar button:hover {
+      background: #475569;
+      transform: scale(1.1);
     }
-    #normalBtn { background: #4CAF50; }
-    #tagBtn { background: #f44336; }
-    #game { display: none; height: 100vh; position: relative; }
-    #canvas { background: #228B22; border: 2px solid #333; display: block; margin: 0 auto; cursor: crosshair; }
-    #chat { position: fixed; top: 10px; left: 10px; width: 320px; background: rgba(0,0,0,0.75); color: white; border-radius: 10px; padding: 10px; z-index: 100; }
-    #messages { height: 140px; overflow-y: auto; margin-bottom: 10px; padding: 0; list-style: none; }
-    #playersList { margin-top: 10px; max-height: 120px; overflow-y: auto; background: rgba(255,255,255,0.1); padding: 8px; border-radius: 6px; display: none; }
-    #inventory { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.7); border-radius: 8px; padding: 10px; color: white; z-index: 100; }
-    .slot { width: 50px; height: 50px; background: #444; border: 2px solid #777; margin: 5px; display: inline-block; cursor: pointer; border-radius: 6px; }
-    .slot.selected { border-color: #ffcc00; box-shadow: 0 0 10px #ffcc00; }
-    #uiBars { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 12px; z-index: 100; }
-    .bar-container { background: rgba(0,0,0,0.65); padding: 8px 16px; border-radius: 8px; color: white; min-width: 240px; text-align: center; }
-    .bar-outer { width: 220px; height: 18px; background: #222; border-radius: 6px; overflow: hidden; margin-top: 4px; }
-    .bar-inner { height: 100%; transition: width 0.4s, background 0.4s; }
+
+    /* Main Content Area */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .greeting {
+      font-size: 48px;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+
+    .username {
+      color: #a5b4fc;
+    }
+
+    /* Top-right Profile */
+    .profile {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(30, 41, 59, 0.8);
+      padding: 10px 16px;
+      border-radius: 50px;
+    }
+
+    .profile-username {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .profile-pic {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #64748b;
+      border: 3px solid #a5b4fc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    /* Hide game elements for now */
+    #game, #canvas, #minimap, #chat, #inventory, #uiBars {
+      display: none;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Login/Register Screen -->
-  <div id="authScreen">
-    <h1>Multiplayer Square Game</h1>
-    <input id="username" placeholder="Username" required minlength="3" maxlength="20">
-    <input id="password" type="password" placeholder="Password" required minlength="6">
-    <button id="loginBtn">Login</button>
-    <button id="registerBtn">Register</button>
-    <p id="authMessage"></p>
+  <!-- Left Sidebar Navigation -->
+  <div class="sidebar">
+    <button>Home</button>
+    <button>Friends</button>
+    <button>Chat</button>
+    <button>Settings</button>
   </div>
 
-  <!-- Mode Selection -->
-  <div id="modeSelect" style="display:none;">
-    <h1>Choose Game Mode</h1>
-    <button id="normalBtn" class="mode-btn">Normal</button>
-    <button id="tagBtn" class="mode-btn">Tag</button>
+  <!-- Main Content -->
+  <div class="main">
+    <h1 class="greeting">
+      Hello, <span class="username">(User)</span>
+    </h1>
+
+    <!-- Top-right Profile -->
+    <div class="profile">
+      <span class="profile-username">(username)</span>
+      <div class="profile-pic">P</div> <!-- Replace P with actual profile picture later -->
+    </div>
   </div>
 
-  <!-- Game Screen -->
+  <!-- Game elements (hidden for now) -->
   <div id="game">
     <canvas id="canvas" width="960" height="720"></canvas>
     <canvas id="minimap" width="180" height="135"></canvas>
-
     <div id="chat">
       <ul id="messages"></ul>
-      <div id="playersList">
+      <div id="playersList" style="display:none;">
         <h4>Players</h4>
         <ul id="playerListUl"></ul>
       </div>
       <input id="chatInput" placeholder="Say something..." maxlength="100">
       <button id="sendBtn">Send</button>
     </div>
-
     <div id="inventory">
       <div>Inventory</div>
       <div id="slots"></div>
     </div>
-
     <div id="uiBars">
       <div class="bar-container">
         <div id="healthText">Health: 100/100</div>
@@ -90,6 +156,11 @@
         <div class="bar-outer"><div id="staminaBar" class="bar-inner" style="width:100%; background:#3498db;"></div></div>
       </div>
     </div>
+  </div>
+
+  <!-- Login screen (hidden for now - will be shown on first load later) -->
+  <div id="authScreen" style="display:none;">
+    <!-- Your login/register form here when ready -->
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
