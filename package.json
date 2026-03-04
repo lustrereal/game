@@ -8,9 +8,12 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
-  },
-  "engines": {
-    "node": ">=18"
+    "socket.io": "^4.7.2",
+    "mongoose": "^8.0.0",           // ← add this
+    "bcryptjs": "^2.4.3",           // ← add this
+    "jsonwebtoken": "^9.0.2",       // ← add this
+    "express-rate-limit": "^7.1.5", // ← add this (optional but good for security)
+    "helmet": "^7.1.0",             // ← add this (optional security headers)
+    "cors": "^2.8.5"                // ← add this
   }
 }
