@@ -166,10 +166,11 @@
   <!-- Home Page -->
   <div class="sidebar">
     <button>Home</button>
+    <button>Discover</button>   <!-- New Discover button added here -->
     <button>Friends</button>
     <button>Chat</button>
     <button>Settings</button>
-    <button>Editor</button>  <!-- New button added here -->
+    <button>Editor</button>
   </div>
 
   <div class="main">
@@ -185,7 +186,34 @@
 
   <!-- Game content (hidden for now) -->
   <div id="game">
-    <!-- Your canvas, chat, inventory, etc. go here -->
+    <canvas id="canvas" width="960" height="720"></canvas>
+    <canvas id="minimap" width="180" height="135"></canvas>
+
+    <div id="chat">
+      <ul id="messages"></ul>
+      <div id="playersList" style="display:none;">
+        <h4>Players</h4>
+        <ul id="playerListUl"></ul>
+      </div>
+      <input id="chatInput" placeholder="Say something..." maxlength="100">
+      <button id="sendBtn">Send</button>
+    </div>
+
+    <div id="inventory">
+      <div>Inventory</div>
+      <div id="slots"></div>
+    </div>
+
+    <div id="uiBars">
+      <div class="bar-container">
+        <div id="healthText">Health: 100/100</div>
+        <div class="bar-outer"><div id="healthBar" class="bar-inner" style="width:100%; background:#2ecc71;"></div></div>
+      </div>
+      <div class="bar-container">
+        <div id="staminaText">Stamina: 100/100</div>
+        <div class="bar-outer"><div id="staminaBar" class="bar-inner" style="width:100%; background:#3498db;"></div></div>
+      </div>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
