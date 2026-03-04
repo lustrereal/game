@@ -1,17 +1,20 @@
-// FULL updated client.js - replace your current file
-const socket = io();
+const socket = io({ autoConnect: false }); // We'll connect manually after login
+
+const authScreen = document.getElementById('authScreen');
+const modeSelect = document.getElementById('modeSelect');
+const gameDiv = document.getElementById('game');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const loginBtn = document.getElementById('loginBtn');
+const registerBtn = document.getElementById('registerBtn');
+const authMessage = document.getElementById('authMessage');
+const normalBtn = document.getElementById('normalBtn');
+const tagBtn = document.getElementById('tagBtn');
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const minimap = document.getElementById('minimap');
 const mctx = minimap.getContext('2d');
-const menu = document.getElementById('menu');
-const modeSelect = document.getElementById('modeSelect');
-const gameDiv = document.getElementById('game');
-const nameInput = document.getElementById('nameInput');
-const colorSelect = document.getElementById('colorSelect');
-const playButton = document.getElementById('playButton');
-const normalBtn = document.getElementById('normalBtn');
-const tagBtn = document.getElementById('tagBtn');
 const chatInput = document.getElementById('chatInput');
 const sendBtn = document.getElementById('sendBtn');
 const messagesUl = document.getElementById('messages');
@@ -26,6 +29,7 @@ const playerListUl = document.getElementById('playerListUl');
 const WORLD_WIDTH = 3000;
 const WORLD_HEIGHT = 2000;
 
+let authToken = null;
 let currentMode = null;
 const players = {};
 const bows = [];
@@ -47,52 +51,94 @@ let mouseX = 0;
 let mouseY = 0;
 let lastDirection = { x: 1, y: 0 };
 
-function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-  return text.replace(/[&<>"']/g, m => map[m]);
-}
+// ────────────────────────────────────────────────
+// Auth handling
+// ────────────────────────────────────────────────
 
-function addMessageToChat(name, color, message) {
-  const li = document.createElement('li');
-  li.innerHTML = `<span style="color:${color};font-weight:bold">${escapeHtml(name)}:</span> ${escapeHtml(message)}`;
-  messagesUl.appendChild(li);
-  if (messagesUl.children.length > 50) messagesUl.removeChild(messagesUl.firstChild);
-  messagesUl.scrollTop = messagesUl.scrollHeight;
-}
+loginBtn.addEventListener('click', async () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
 
-function updatePlayersList() {
-  if (currentMode !== 'tag') {
-    playersList.style.display = 'none';
+  if (!username || !password) {
+    authMessage.textContent = 'Please fill in both fields';
     return;
   }
-  playersList.style.display = 'block';
-  playerListUl.innerHTML = '';
-  Object.values(players).forEach(p => {
-    const li = document.createElement('li');
-    li.textContent = `${p.name} (${p.role || '???'})`;
-    li.className = p.role === 'tagger' ? 'tagger' : 'runner';
-    playerListUl.appendChild(li);
-  });
+
+  try {
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+
+    authToken = data.token;
+    authScreen.style.display = 'none';
+    modeSelect.style.display = 'flex';
+    authMessage.textContent = '';
+  } catch (err) {
+    authMessage.textContent = err.message;
+  }
+});
+
+registerBtn.addEventListener('click', async () => {
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+
+  if (!username || !password) {
+    authMessage.textContent = 'Please fill in both fields';
+    return;
+  }
+
+  try {
+    const res = await fetch('/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+    authToken = data.token;
+    authScreen.style.display = 'none';
+    modeSelect.style.display = 'flex';
+    authMessage.textContent = '';
+  } catch (err) {
+    authMessage.textContent = err.message;
+  }
+});
+
+// Connect socket only after auth
+function connectSocket() {
+  socket.connect();
 }
 
-playButton.addEventListener('click', () => {
-  menu.style.display = 'none';
-  modeSelect.style.display = 'flex';
-});
+// ────────────────────────────────────────────────
+// Mode selection
+// ────────────────────────────────────────────────
 
 normalBtn.addEventListener('click', () => {
   currentMode = 'normal';
   modeSelect.style.display = 'none';
   gameDiv.style.display = 'block';
-  socket.emit('join', { color: colorSelect.value, name: nameInput.value.trim() || 'Anonymous', mode: 'normal' });
+  connectSocket();
+  socket.emit('join', { mode: 'normal' });
 });
 
 tagBtn.addEventListener('click', () => {
   currentMode = 'tag';
   modeSelect.style.display = 'none';
   gameDiv.style.display = 'block';
-  socket.emit('join', { color: colorSelect.value, name: nameInput.value.trim() || 'Anonymous', mode: 'tag' });
+  connectSocket();
+  socket.emit('join', { mode: 'tag' });
 });
+
+// ────────────────────────────────────────────────
+// Chat
+// ────────────────────────────────────────────────
 
 sendBtn.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', e => {
@@ -107,7 +153,10 @@ function sendChatMessage() {
   }
 }
 
-// Mouse & click for shooting
+// ────────────────────────────────────────────────
+// Movement & input
+// ────────────────────────────────────────────────
+
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
   mouseX = e.clientX - rect.left + cameraX;
@@ -115,7 +164,8 @@ canvas.addEventListener('mousemove', e => {
 });
 
 canvas.addEventListener('click', e => {
-  if (e.button === 0 && players[myId]?.equipped?.type === 'bow') {
+  if (e.button !== 0) return;
+  if (players[myId]?.equipped?.type === 'bow' && currentMode === 'normal') {
     const p = players[myId];
     const dx = mouseX - (p.x + 25);
     const dy = mouseY - (p.y + 25);
@@ -124,7 +174,6 @@ canvas.addEventListener('click', e => {
   }
 });
 
-// Keyboard
 document.addEventListener('keydown', e => {
   if (e.target === chatInput) return;
 
@@ -135,7 +184,7 @@ document.addEventListener('keydown', e => {
     case 'd': movement.right = true; break;
     case 'shift': sprinting = true; break;
     case 'e':
-      if (players[myId]) {
+      if (players[myId] && currentMode === 'normal') {
         const p = players[myId];
         let closest = null, minD = 80;
         bows.forEach(b => {
@@ -146,8 +195,10 @@ document.addEventListener('keydown', e => {
       }
       break;
     case '1': case '2': case '3':
-      const slot = parseInt(e.key) - 1;
-      socket.emit('equipItem', slot);
+      if (currentMode === 'normal') {
+        const slot = parseInt(e.key) - 1;
+        socket.emit('equipItem', slot);
+      }
       break;
     case 'enter':
       if (document.activeElement !== chatInput) {
@@ -169,9 +220,16 @@ document.addEventListener('keyup', e => {
   }
 });
 
+// ────────────────────────────────────────────────
+// UI updates
+// ────────────────────────────────────────────────
+
 function updateInventoryUI() {
+  if (currentMode !== 'normal' || !players[myId]) {
+    slotsDiv.innerHTML = '';
+    return;
+  }
   slotsDiv.innerHTML = '';
-  if (!players[myId]) return;
   players[myId].inventory.forEach((item, i) => {
     const slot = document.createElement('div');
     slot.className = 'slot';
@@ -193,6 +251,26 @@ function updateInventoryUI() {
   });
 }
 
+function updatePlayersList() {
+  if (currentMode !== 'tag') {
+    playersList.style.display = 'none';
+    return;
+  }
+  playersList.style.display = 'block';
+  playerListUl.innerHTML = '';
+  Object.values(players).forEach(p => {
+    if (!p.role) return;
+    const li = document.createElement('li');
+    li.textContent = `${p.name} (${p.role})`;
+    li.className = p.role === 'tagger' ? 'tagger' : 'runner';
+    playerListUl.appendChild(li);
+  });
+}
+
+// ────────────────────────────────────────────────
+// Drawing functions (unchanged from previous working version)
+// ────────────────────────────────────────────────
+
 function drawBowIcon(ctx, cx, cy, size) {
   ctx.save();
   ctx.translate(cx, cy);
@@ -212,7 +290,7 @@ function drawBowIcon(ctx, cx, cy, size) {
 }
 
 function drawEquipped(player) {
-  if (!player.equipped || player.equipped.type !== 'bow') return;
+  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal') return;
   ctx.save();
   ctx.translate(player.x + 25, player.y + 25);
 
@@ -277,12 +355,24 @@ function drawBubble(x, y, text, color) {
   ctx.restore();
 }
 
+// ────────────────────────────────────────────────
+// Game loop
+// ────────────────────────────────────────────────
+
 let lastTime = performance.now();
 
 function gameLoop(time = performance.now()) {
   const dt = (time - lastTime) / 1000;
   lastTime = time;
 
+  // Stamina
+  if (sprinting && stamina > 0 && (movement.up || movement.down || movement.left || movement.right)) {
+    stamina = Math.max(0, stamina - staminaDrainRate * dt);
+  } else {
+    stamina = Math.min(maxStamina, stamina + staminaRegenRate * dt);
+  }
+
+  // Movement
   if (players[myId]) {
     const speed = sprinting && stamina > 0 ? sprintSpeed : baseSpeed;
     if (movement.up) players[myId].y -= speed;
@@ -296,6 +386,7 @@ function gameLoop(time = performance.now()) {
     socket.emit('playerMovement', { x: players[myId].x, y: players[myId].y });
   }
 
+  // Camera
   if (players[myId]) {
     cameraX = players[myId].x + 25 - canvas.width / 2;
     cameraY = players[myId].y + 25 - canvas.height / 2;
@@ -308,7 +399,7 @@ function gameLoop(time = performance.now()) {
   ctx.translate(-cameraX, -cameraY);
 
   Object.values(players).forEach(p => {
-    ctx.fillStyle = p.role === 'tagger' ? '#ff5252' : '#448aff';
+    ctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
     ctx.fillRect(p.x, p.y, 50, 50);
     ctx.strokeStyle = '#000';
     ctx.strokeRect(p.x, p.y, 50, 50);
@@ -329,22 +420,24 @@ function gameLoop(time = performance.now()) {
     }
   });
 
-  bows.forEach(b => drawBowIcon(ctx, b.x, b.y, 48));
+  if (currentMode === 'normal') {
+    bows.forEach(b => drawBowIcon(ctx, b.x, b.y, 48));
 
-  if (players[myId]) {
-    const p = players[myId];
-    bows.forEach(bow => {
-      const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
-      if (dist < 70) {
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = '#ffff00';
-        ctx.beginPath();
-        ctx.arc(bow.x, bow.y, 40, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-    });
+    if (players[myId]) {
+      const p = players[myId];
+      bows.forEach(bow => {
+        const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
+        if (dist < 70) {
+          ctx.save();
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = '#ffff00';
+          ctx.beginPath();
+          ctx.arc(bow.x, bow.y, 40, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+    }
   }
 
   projectiles.forEach(p => {
@@ -377,7 +470,7 @@ function gameLoop(time = performance.now()) {
   const sy = minimap.height / WORLD_HEIGHT;
 
   Object.values(players).forEach(p => {
-    mctx.fillStyle = p.role === 'tagger' ? '#ff5252' : '#448aff';
+    mctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
     mctx.beginPath();
     mctx.arc(p.x * sx, p.y * sy, 2.5, 0, Math.PI * 2);
     mctx.fill();
@@ -400,7 +493,7 @@ function gameLoop(time = performance.now()) {
   mctx.lineWidth = 2;
   mctx.strokeRect(vx, vy, canvas.width * sx, canvas.height * sy);
 
-  // UI updates
+  // UI
   if (players[myId]) {
     const hp = players[myId].health ?? 100;
     healthText.textContent = `Health: ${Math.floor(hp)}/100`;
@@ -420,7 +513,14 @@ function gameLoop(time = performance.now()) {
 
 requestAnimationFrame(gameLoop);
 
+// ────────────────────────────────────────────────
 // Socket events
+// ────────────────────────────────────────────────
+
+socket.on('connect', () => {
+  console.log('Socket connected');
+});
+
 socket.on('currentState', data => {
   Object.assign(players, data.players);
   bows.length = 0;
@@ -445,7 +545,8 @@ socket.on('playerUpdate', data => {
   if (players[data.id]) {
     players[data.id].inventory = data.inventory;
     players[data.id].equipped = data.equipped;
-    players[data.id].role = data.role;
+    if (data.role) players[data.id].role = data.role;
+    if (data.color) players[data.id].color = data.color;
   }
 });
 
