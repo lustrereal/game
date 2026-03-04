@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Square Game - Home</title>
+  <title>Square Game</title>
   <style>
     body {
       margin: 0;
@@ -16,7 +16,7 @@
       display: flex;
     }
 
-    /* Sidebar */
+    /* Sidebar – always visible on home/editor */
     .sidebar {
       width: 80px;
       background: #1e293b;
@@ -26,6 +26,7 @@
       padding-top: 20px;
       padding-bottom: 20px;
       gap: 40px;
+      z-index: 500;
     }
 
     .sidebar button {
@@ -50,8 +51,33 @@
       transform: scale(1.1);
     }
 
-    /* Main content */
-    .main {
+    .sidebar button.active {
+      background: #64748b;
+      box-shadow: 0 0 15px rgba(100, 116, 139, 0.6);
+    }
+
+    /* Main content area */
+    .content {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Screens */
+    #authScreen, #modeSelect, #homeScreen, #editorScreen, #gameScreen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #authScreen { background: rgba(0,0,0,0.85); z-index: 400; }
+    #modeSelect { background: rgba(44, 62, 80, 0.95); z-index: 300; }
+
+    /* Home screen */
+    #homeScreen .main {
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -81,6 +107,7 @@
       background: rgba(30, 41, 59, 0.8);
       padding: 10px 16px;
       border-radius: 50px;
+      z-index: 200;
     }
 
     .profile-username {
@@ -101,122 +128,23 @@
       font-weight: bold;
     }
 
-    /* Auth screen */
-    #authScreen {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.85);
+    /* Editor screen */
+    #editorScreen {
+      background: #1a2533;
+      padding: 20px;
+      overflow: auto;
+    }
+
+    .editor-header {
       display: flex;
-      flex-direction: column;
+      justify-content: space-between;
       align-items: center;
-      justify-content: center;
-      z-index: 400;
+      margin-bottom: 20px;
+      padding: 0 20px;
     }
 
-    #authScreen input {
-      margin: 12px;
-      padding: 14px;
-      width: 300px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: 1px solid #666;
-      background: #1e293b;
-      color: white;
+    .editor-header h1 {
+      margin: 0;
     }
 
-    #authScreen button {
-      margin: 10px;
-      padding: 14px 40px;
-      font-size: 18px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    #loginBtn { background: #4CAF50; color: white; }
-    #registerBtn { background: #2196F3; color: white; }
-
-    #authMessage { color: #ff6b6b; margin-top: 10px; min-height: 24px; }
-
-    /* Hide other screens initially */
-    #modeSelect, #game {
-      display: none;
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Auth screen – shown first -->
-  <div id="authScreen">
-    <h1>Multiplayer Square Game</h1>
-    <input id="username" placeholder="Username" required minlength="3" maxlength="20">
-    <input id="password" type="password" placeholder="Password" required minlength="6">
-    <button id="loginBtn">Login</button>
-    <button id="registerBtn">Register</button>
-    <p id="authMessage"></p>
-  </div>
-
-  <!-- Mode Selection – shown after login -->
-  <div id="modeSelect">
-    <h1>Choose Game Mode</h1>
-    <button id="normalBtn" class="mode-btn">Normal</button>
-    <button id="tagBtn" class="mode-btn">Tag</button>
-  </div>
-
-  <!-- Home Page -->
-  <div class="sidebar">
-    <button>Home</button>
-    <button>Discover</button>   <!-- New Discover button added here -->
-    <button>Friends</button>
-    <button>Chat</button>
-    <button>Settings</button>
-    <button>Editor</button>
-  </div>
-
-  <div class="main">
-    <h1 class="greeting">
-      Hello, <span id="displayUsername" class="username">(User)</span>
-    </h1>
-
-    <div class="profile">
-      <span id="profileUsername" class="profile-username">(username)</span>
-      <div class="profile-pic">P</div>
-    </div>
-  </div>
-
-  <!-- Game content (hidden for now) -->
-  <div id="game">
-    <canvas id="canvas" width="960" height="720"></canvas>
-    <canvas id="minimap" width="180" height="135"></canvas>
-
-    <div id="chat">
-      <ul id="messages"></ul>
-      <div id="playersList" style="display:none;">
-        <h4>Players</h4>
-        <ul id="playerListUl"></ul>
-      </div>
-      <input id="chatInput" placeholder="Say something..." maxlength="100">
-      <button id="sendBtn">Send</button>
-    </div>
-
-    <div id="inventory">
-      <div>Inventory</div>
-      <div id="slots"></div>
-    </div>
-
-    <div id="uiBars">
-      <div class="bar-container">
-        <div id="healthText">Health: 100/100</div>
-        <div class="bar-outer"><div id="healthBar" class="bar-inner" style="width:100%; background:#2ecc71;"></div></div>
-      </div>
-      <div class="bar-container">
-        <div id="staminaText">Stamina: 100/100</div>
-        <div class="bar-outer"><div id="staminaBar" class="bar-inner" style="width:100%; background:#3498db;"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
-</body>
-</html>
+    .editor-tools {
