@@ -1,8 +1,8 @@
-// client.js - FULL FILE
+// client.js - FULL FILE (fixed login/register + persistent login + sidebar)
 
 const socket = io({ autoConnect: false });
 
-// DOM elements
+// DOM elements with null checks
 const authScreen = document.getElementById('authScreen');
 const modeSelect = document.getElementById('modeSelect');
 const homeScreen = document.getElementById('homeScreen');
@@ -16,6 +16,8 @@ const authMessage = document.getElementById('authMessage');
 const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
+
+// Game elements (safe access)
 const canvas = document.getElementById('canvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 const minimap = document.getElementById('minimap');
@@ -72,7 +74,7 @@ function saveLogin(token, username) {
 function loadLogin() {
   const token = localStorage.getItem('authToken');
   const username = localStorage.getItem('username');
-  if (token && username) {
+  if (token && username && authScreen && homeScreen) {
     authToken = token;
     currentUsername = username;
     if (displayUsername) displayUsername.textContent = currentUsername;
@@ -87,34 +89,42 @@ function loadLogin() {
 }
 
 // Auto-login on page load
-if (loadLogin()) {
-  showPage('home');
-} else {
-  showPage('auth');
-}
+window.addEventListener('load', () => {
+  if (loadLogin()) {
+    showPage('home');
+  } else if (authScreen) {
+    showPage('auth');
+  }
+});
 
 // ────────────────────────────────────────────────
-// Login / Register
+// Login / Register with better debugging
 // ────────────────────────────────────────────────
 
 loginBtn.addEventListener('click', async () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value;
+  if (!authMessage) return;
+  authMessage.textContent = 'Logging in...';
+
+  const username = usernameInput?.value?.trim();
+  const password = passwordInput?.value;
 
   if (!username || !password) {
     authMessage.textContent = 'Please fill in both fields';
     return;
   }
 
-  authMessage.textContent = 'Logging in...';
   try {
+    console.log('Sending login request...');
     const res = await fetch('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
 
+    console.log('Login response status:', res.status);
+
     const data = await res.json();
+    console.log('Login response data:', data);
 
     if (!res.ok) throw new Error(data.error || 'Login failed');
 
@@ -123,23 +133,27 @@ loginBtn.addEventListener('click', async () => {
 
     saveLogin(authToken, currentUsername);
 
-    displayUsername.textContent = currentUsername;
-    profileUsername.textContent = currentUsername;
+    if (displayUsername) displayUsername.textContent = currentUsername;
+    if (profileUsername) profileUsername.textContent = currentUsername;
 
-    authScreen.style.display = 'none';
-    homeScreen.style.display = 'flex';
+    if (authScreen) authScreen.style.display = 'none';
+    if (homeScreen) homeScreen.style.display = 'flex';
     authMessage.textContent = '';
 
     socket.io.opts.auth = { token: authToken };
     socket.connect();
   } catch (err) {
     authMessage.textContent = err.message;
+    console.error('Login error:', err);
   }
 });
 
 registerBtn.addEventListener('click', async () => {
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value;
+  if (!authMessage) return;
+  authMessage.textContent = 'Registering...';
+
+  const username = usernameInput?.value?.trim();
+  const password = passwordInput?.value;
 
   if (!username || !password) {
     authMessage.textContent = 'Please fill in both fields';
@@ -151,15 +165,18 @@ registerBtn.addEventListener('click', async () => {
     return;
   }
 
-  authMessage.textContent = 'Registering...';
   try {
+    console.log('Sending register request...');
     const res = await fetch('/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
 
+    console.log('Register response status:', res.status);
+
     const data = await res.json();
+    console.log('Register response data:', data);
 
     if (!res.ok) throw new Error(data.error || 'Registration failed');
 
@@ -168,17 +185,18 @@ registerBtn.addEventListener('click', async () => {
 
     saveLogin(authToken, currentUsername);
 
-    displayUsername.textContent = currentUsername;
-    profileUsername.textContent = currentUsername;
+    if (displayUsername) displayUsername.textContent = currentUsername;
+    if (profileUsername) profileUsername.textContent = currentUsername;
 
-    authScreen.style.display = 'none';
-    homeScreen.style.display = 'flex';
+    if (authScreen) authScreen.style.display = 'none';
+    if (homeScreen) homeScreen.style.display = 'flex';
     authMessage.textContent = '';
 
     socket.io.opts.auth = { token: authToken };
     socket.connect();
   } catch (err) {
     authMessage.textContent = err.message;
+    console.error('Register error:', err);
   }
 });
 
@@ -195,12 +213,12 @@ sidebarButtons.forEach(btn => {
       if (el) el.style.display = 'none';
     });
 
-    // Show target screen
-    if (target === 'home') homeScreen.style.display = 'flex';
-    if (target === 'editor') editorScreen.style.display = 'flex';
-    // Add more screens later (discover, friends, chat, settings, game)
+    // Show target
+    if (target === 'home' && homeScreen) homeScreen.style.display = 'flex';
+    if (target === 'editor' && editorScreen) editorScreen.style.display = 'flex';
+    // Add more screens as needed
 
-    // Active button style
+    // Active style
     sidebarButtons.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
   });
@@ -210,13 +228,13 @@ sidebarButtons.forEach(btn => {
 // Chat
 // ────────────────────────────────────────────────
 
-sendBtn.addEventListener('click', sendChatMessage);
-chatInput.addEventListener('keypress', e => {
+if (sendBtn) sendBtn.addEventListener('click', sendChatMessage);
+if (chatInput) chatInput.addEventListener('keypress', e => {
   if (e.key === 'Enter') sendChatMessage();
 });
 
 function sendChatMessage() {
-  const message = chatInput.value.trim();
+  const message = chatInput?.value?.trim();
   if (message) {
     socket.emit('chatMessage', { message });
     chatInput.value = '';
@@ -224,25 +242,27 @@ function sendChatMessage() {
 }
 
 // ────────────────────────────────────────────────
-// Mouse & click for shooting (normal mode only)
+// Mouse & click for shooting
 // ────────────────────────────────────────────────
 
-canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect();
-  mouseX = e.clientX - rect.left + cameraX;
-  mouseY = e.clientY - rect.top + cameraY;
-});
+if (canvas) {
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left + cameraX;
+    mouseY = e.clientY - rect.top + cameraY;
+  });
 
-canvas.addEventListener('click', e => {
-  if (e.button !== 0) return;
-  if (players[myId]?.equipped?.type === 'bow' && currentMode === 'normal') {
-    const p = players[myId];
-    const dx = mouseX - (p.x + 25);
-    const dy = mouseY - (p.y + 25);
-    const angle = Math.atan2(dy, dx);
-    socket.emit('shoot', { angle });
-  }
-});
+  canvas.addEventListener('click', e => {
+    if (e.button !== 0) return;
+    if (players[myId]?.equipped?.type === 'bow' && currentMode === 'normal') {
+      const p = players[myId];
+      const dx = mouseX - (p.x + 25);
+      const dy = mouseY - (p.y + 25);
+      const angle = Math.atan2(dy, dx);
+      socket.emit('shoot', { angle });
+    }
+  });
+}
 
 // ────────────────────────────────────────────────
 // Keyboard controls
@@ -299,10 +319,7 @@ document.addEventListener('keyup', e => {
 // ────────────────────────────────────────────────
 
 function updateInventoryUI() {
-  if (currentMode !== 'normal' || !players[myId]) {
-    slotsDiv.innerHTML = '';
-    return;
-  }
+  if (currentMode !== 'normal' || !players[myId] || !slotsDiv) return;
   slotsDiv.innerHTML = '';
   players[myId].inventory.forEach((item, i) => {
     const slot = document.createElement('div');
@@ -326,8 +343,8 @@ function updateInventoryUI() {
 }
 
 function updatePlayersList() {
-  if (currentMode !== 'tag') {
-    playersList.style.display = 'none';
+  if (currentMode !== 'tag' || !playersList || !playerListUl) {
+    if (playersList) playersList.style.display = 'none';
     return;
   }
   playersList.style.display = 'block';
@@ -364,7 +381,7 @@ function drawBowIcon(ctx, cx, cy, size) {
 }
 
 function drawEquipped(player) {
-  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal') return;
+  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal' || !ctx) return;
   ctx.save();
   ctx.translate(player.x + 25, player.y + 25);
 
@@ -379,6 +396,7 @@ function drawEquipped(player) {
 }
 
 function drawName(x, y, name) {
+  if (!ctx) return;
   ctx.save();
   ctx.font = 'bold 14px Arial';
   ctx.textAlign = 'center';
@@ -392,6 +410,7 @@ function drawName(x, y, name) {
 }
 
 function drawBubble(x, y, text, color) {
+  if (!ctx) return;
   ctx.save();
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
@@ -468,115 +487,123 @@ function gameLoop(time = performance.now()) {
     cameraY = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, cameraY));
   }
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.save();
-  ctx.translate(-cameraX, -cameraY);
-
-  Object.values(players).forEach(p => {
-    ctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
-    ctx.fillRect(p.x, p.y, 50, 50);
-    ctx.strokeStyle = '#000';
-    ctx.strokeRect(p.x, p.y, 50, 50);
-
-    drawEquipped(p);
-    drawName(p.x + 25, p.y, p.name);
-
-    const barW = 50;
-    const barH = 6;
-    const pct = (p.health ?? 100) / 100;
-    ctx.fillStyle = '#333';
-    ctx.fillRect(p.x, p.y - 12, barW, barH);
-    ctx.fillStyle = pct > 0.5 ? '#0f0' : pct > 0.25 ? '#ff0' : '#f00';
-    ctx.fillRect(p.x, p.y - 12, barW * pct, barH);
-
-    if (p.lastMessage && Date.now() < p.messageTimeout) {
-      drawBubble(p.x + 25, p.y - 20, p.lastMessage, p.color);
-    }
-  });
-
-  if (currentMode === 'normal') {
-    bows.forEach(b => drawBowIcon(ctx, b.x, b.y, 48));
-
-    if (players[myId]) {
-      const p = players[myId];
-      bows.forEach(bow => {
-        const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
-        if (dist < 70) {
-          ctx.save();
-          ctx.globalAlpha = 0.4;
-          ctx.fillStyle = '#ffff00';
-          ctx.beginPath();
-          ctx.arc(bow.x, bow.y, 40, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      });
-    }
-  }
-
-  projectiles.forEach(p => {
+  if (ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.translate(p.x, p.y);
-    const angle = Math.atan2(p.vy, p.vx);
-    ctx.rotate(angle);
-    ctx.fillStyle = '#ff4444';
-    ctx.fillRect(-18, -4, 36, 8);
-    ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(6, -10);
-    ctx.lineTo(6, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = 'rgba(255,180,180,0.7)';
-    ctx.fillRect(-30, -6, 24, 12);
-    ctx.restore();
-  });
+    ctx.translate(-cameraX, -cameraY);
 
-  ctx.restore();
+    Object.values(players).forEach(p => {
+      ctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
+      ctx.fillRect(p.x, p.y, 50, 50);
+      ctx.strokeStyle = '#000';
+      ctx.strokeRect(p.x, p.y, 50, 50);
+
+      drawEquipped(p);
+      drawName(p.x + 25, p.y, p.name);
+
+      const barW = 50;
+      const barH = 6;
+      const pct = (p.health ?? 100) / 100;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(p.x, p.y - 12, barW, barH);
+      ctx.fillStyle = pct > 0.5 ? '#0f0' : pct > 0.25 ? '#ff0' : '#f00';
+      ctx.fillRect(p.x, p.y - 12, barW * pct, barH);
+
+      if (p.lastMessage && Date.now() < p.messageTimeout) {
+        drawBubble(p.x + 25, p.y - 20, p.lastMessage, p.color);
+      }
+    });
+
+    if (currentMode === 'normal') {
+      bows.forEach(b => drawBowIcon(ctx, b.x, b.y, 48));
+
+      if (players[myId]) {
+        const p = players[myId];
+        bows.forEach(bow => {
+          const dist = Math.hypot(p.x + 25 - bow.x, p.y + 25 - bow.y);
+          if (dist < 70) {
+            ctx.save();
+            ctx.globalAlpha = 0.4;
+            ctx.fillStyle = '#ffff00';
+            ctx.beginPath();
+            ctx.arc(bow.x, bow.y, 40, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        });
+      }
+    }
+
+    projectiles.forEach(p => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      const angle = Math.atan2(p.vy, p.vx);
+      ctx.rotate(angle);
+      ctx.fillStyle = '#ff4444';
+      ctx.fillRect(-18, -4, 36, 8);
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(6, -10);
+      ctx.lineTo(6, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = 'rgba(255,180,180,0.7)';
+      ctx.fillRect(-30, -6, 24, 12);
+      ctx.restore();
+    });
+
+    ctx.restore();
+  }
 
   // Minimap
-  mctx.clearRect(0, 0, minimap.width, minimap.height);
-  mctx.fillStyle = '#228B22';
-  mctx.fillRect(0, 0, minimap.width, minimap.height);
+  if (mctx) {
+    mctx.clearRect(0, 0, minimap.width, minimap.height);
+    mctx.fillStyle = '#228B22';
+    mctx.fillRect(0, 0, minimap.width, minimap.height);
 
-  const sx = minimap.width / WORLD_WIDTH;
-  const sy = minimap.height / WORLD_HEIGHT;
+    const sx = minimap.width / WORLD_WIDTH;
+    const sy = minimap.height / WORLD_HEIGHT;
 
-  Object.values(players).forEach(p => {
-    mctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
-    mctx.beginPath();
-    mctx.arc(p.x * sx, p.y * sy, 2.5, 0, Math.PI * 2);
-    mctx.fill();
-  });
+    Object.values(players).forEach(p => {
+      mctx.fillStyle = p.role === 'tagger' ? '#ff5252' : (p.role === 'runner' ? '#448aff' : p.color);
+      mctx.beginPath();
+      mctx.arc(p.x * sx, p.y * sy, 2.5, 0, Math.PI * 2);
+      mctx.fill();
+    });
 
-  if (players[myId]) {
-    mctx.save();
-    mctx.shadowColor = '#fff';
-    mctx.shadowBlur = 8;
-    mctx.fillStyle = '#ffffff';
-    mctx.beginPath();
-    mctx.arc(players[myId].x * sx, players[myId].y * sy, 4, 0, Math.PI * 2);
-    mctx.fill();
-    mctx.restore();
+    if (players[myId]) {
+      mctx.save();
+      mctx.shadowColor = '#fff';
+      mctx.shadowBlur = 8;
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.arc(players[myId].x * sx, players[myId].y * sy, 4, 0, Math.PI * 2);
+      mctx.fill();
+      mctx.restore();
+    }
+
+    const vx = cameraX * sx;
+    const vy = cameraY * sy;
+    mctx.strokeStyle = '#ffffff';
+    mctx.lineWidth = 2;
+    mctx.strokeRect(vx, vy, canvas.width * sx, canvas.height * sy);
   }
-
-  const vx = cameraX * sx;
-  const vy = cameraY * sy;
-  mctx.strokeStyle = '#ffffff';
-  mctx.lineWidth = 2;
-  mctx.strokeRect(vx, vy, canvas.width * sx, canvas.height * sy);
 
   // UI updates
   if (players[myId]) {
     const hp = players[myId].health ?? 100;
-    healthText.textContent = `Health: ${Math.floor(hp)}/100`;
-    healthBar.style.width = `${hp}%`;
-    healthBar.style.background = hp > 50 ? '#0f0' : hp > 20 ? '#ff0' : '#f00';
+    if (healthText) healthText.textContent = `Health: ${Math.floor(hp)}/100`;
+    if (healthBar) {
+      healthBar.style.width = `${hp}%`;
+      healthBar.style.background = hp > 50 ? '#0f0' : hp > 20 ? '#ff0' : '#f00';
+    }
 
-    staminaText.textContent = `Stamina: ${Math.floor(stamina)}/100`;
-    staminaBar.style.width = `${(stamina / maxStamina) * 100}%`;
-    staminaBar.style.background = stamina > 30 ? '#3498db' : stamina > 10 ? '#f39c12' : '#e74c3c';
+    if (staminaText) staminaText.textContent = `Stamina: ${Math.floor(stamina)}/100`;
+    if (staminaBar) {
+      staminaBar.style.width = `${(stamina / maxStamina) * 100}%`;
+      staminaBar.style.background = stamina > 30 ? '#3498db' : stamina > 10 ? '#f39c12' : '#e74c3c';
+    }
 
     updateInventoryUI();
     updatePlayersList();
@@ -656,8 +683,8 @@ socket.on('playerDisconnected', id => {
 // ────────────────────────────────────────────────
 
 function updateInventoryUI() {
-  if (currentMode !== 'normal' || !players[myId]) {
-    slotsDiv.innerHTML = '';
+  if (currentMode !== 'normal' || !players[myId] || !slotsDiv) {
+    if (slotsDiv) slotsDiv.innerHTML = '';
     return;
   }
   slotsDiv.innerHTML = '';
@@ -683,8 +710,8 @@ function updateInventoryUI() {
 }
 
 function updatePlayersList() {
-  if (currentMode !== 'tag') {
-    playersList.style.display = 'none';
+  if (currentMode !== 'tag' || !playersList || !playerListUl) {
+    if (playersList) playersList.style.display = 'none';
     return;
   }
   playersList.style.display = 'block';
@@ -721,7 +748,7 @@ function drawBowIcon(ctx, cx, cy, size) {
 }
 
 function drawEquipped(player) {
-  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal') return;
+  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal' || !ctx) return;
   ctx.save();
   ctx.translate(player.x + 25, player.y + 25);
 
@@ -736,6 +763,7 @@ function drawEquipped(player) {
 }
 
 function drawName(x, y, name) {
+  if (!ctx) return;
   ctx.save();
   ctx.font = 'bold 14px Arial';
   ctx.textAlign = 'center';
@@ -749,6 +777,7 @@ function drawName(x, y, name) {
 }
 
 function drawBubble(x, y, text, color) {
+  if (!ctx) return;
   ctx.save();
   ctx.font = 'bold 12px Arial';
   ctx.textAlign = 'center';
