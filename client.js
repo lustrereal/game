@@ -1,8 +1,8 @@
-// client.js - FULL FILE (fixed login/register + persistent login + sidebar)
+// client.js - FULL FILE (fixed page switching after login + sidebar navigation)
 
 const socket = io({ autoConnect: false });
 
-// DOM elements with null checks
+// DOM elements
 const authScreen = document.getElementById('authScreen');
 const modeSelect = document.getElementById('modeSelect');
 const homeScreen = document.getElementById('homeScreen');
@@ -17,7 +17,7 @@ const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
 
-// Game elements (safe access)
+// Game elements
 const canvas = document.getElementById('canvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 const minimap = document.getElementById('minimap');
@@ -40,27 +40,6 @@ const WORLD_HEIGHT = 2000;
 let authToken = null;
 let currentUsername = null;
 let currentMode = null;
-let currentScreen = 'auth';
-
-const players = {};
-const bows = [];
-const projectiles = [];
-let myId = null;
-let cameraX = 0;
-let cameraY = 0;
-
-const movement = { up: false, down: false, left: false, right: false };
-const baseSpeed = 5;
-const sprintSpeed = 10;
-let sprinting = false;
-let stamina = 100;
-const maxStamina = 100;
-const staminaDrainRate = 25;
-const staminaRegenRate = 15;
-
-let mouseX = 0;
-let mouseY = 0;
-let lastDirection = { x: 1, y: 0 };
 
 // ────────────────────────────────────────────────
 // Persistent login (localStorage)
@@ -74,13 +53,13 @@ function saveLogin(token, username) {
 function loadLogin() {
   const token = localStorage.getItem('authToken');
   const username = localStorage.getItem('username');
-  if (token && username && authScreen && homeScreen) {
+  if (token && username) {
     authToken = token;
     currentUsername = username;
     if (displayUsername) displayUsername.textContent = currentUsername;
     if (profileUsername) profileUsername.textContent = currentUsername;
-    authScreen.style.display = 'none';
-    homeScreen.style.display = 'flex';
+    if (authScreen) authScreen.style.display = 'none';
+    if (homeScreen) homeScreen.style.display = 'flex';
     socket.io.opts.auth = { token: authToken };
     socket.connect();
     return true;
@@ -91,6 +70,7 @@ function loadLogin() {
 // Auto-login on page load
 window.addEventListener('load', () => {
   if (loadLogin()) {
+    // Already logged in → go to home
     showPage('home');
   } else if (authScreen) {
     showPage('auth');
@@ -98,33 +78,27 @@ window.addEventListener('load', () => {
 });
 
 // ────────────────────────────────────────────────
-// Login / Register with better debugging
+// Login / Register
 // ────────────────────────────────────────────────
 
 loginBtn.addEventListener('click', async () => {
-  if (!authMessage) return;
-  authMessage.textContent = 'Logging in...';
-
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
   if (!username || !password) {
-    authMessage.textContent = 'Please fill in both fields';
+    if (authMessage) authMessage.textContent = 'Please fill in both fields';
     return;
   }
 
+  if (authMessage) authMessage.textContent = 'Logging in...';
   try {
-    console.log('Sending login request...');
     const res = await fetch('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
 
-    console.log('Login response status:', res.status);
-
     const data = await res.json();
-    console.log('Login response data:', data);
 
     if (!res.ok) throw new Error(data.error || 'Login failed');
 
@@ -138,45 +112,42 @@ loginBtn.addEventListener('click', async () => {
 
     if (authScreen) authScreen.style.display = 'none';
     if (homeScreen) homeScreen.style.display = 'flex';
-    authMessage.textContent = '';
+    if (authMessage) authMessage.textContent = '';
 
     socket.io.opts.auth = { token: authToken };
     socket.connect();
+
+    // Force switch to home page after login
+    showPage('home');
   } catch (err) {
-    authMessage.textContent = err.message;
+    if (authMessage) authMessage.textContent = err.message;
     console.error('Login error:', err);
   }
 });
 
 registerBtn.addEventListener('click', async () => {
-  if (!authMessage) return;
-  authMessage.textContent = 'Registering...';
-
   const username = usernameInput?.value?.trim();
   const password = passwordInput?.value;
 
   if (!username || !password) {
-    authMessage.textContent = 'Please fill in both fields';
+    if (authMessage) authMessage.textContent = 'Please fill in both fields';
     return;
   }
 
   if (password.length < 6) {
-    authMessage.textContent = 'Password must be at least 6 characters';
+    if (authMessage) authMessage.textContent = 'Password must be at least 6 characters';
     return;
   }
 
+  if (authMessage) authMessage.textContent = 'Registering...';
   try {
-    console.log('Sending register request...');
     const res = await fetch('/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
 
-    console.log('Register response status:', res.status);
-
     const data = await res.json();
-    console.log('Register response data:', data);
 
     if (!res.ok) throw new Error(data.error || 'Registration failed');
 
@@ -190,12 +161,15 @@ registerBtn.addEventListener('click', async () => {
 
     if (authScreen) authScreen.style.display = 'none';
     if (homeScreen) homeScreen.style.display = 'flex';
-    authMessage.textContent = '';
+    if (authMessage) authMessage.textContent = '';
 
     socket.io.opts.auth = { token: authToken };
     socket.connect();
+
+    // Force switch to home page after register
+    showPage('home');
   } catch (err) {
-    authMessage.textContent = err.message;
+    if (authMessage) authMessage.textContent = err.message;
     console.error('Register error:', err);
   }
 });
@@ -204,25 +178,46 @@ registerBtn.addEventListener('click', async () => {
 // Sidebar navigation
 // ────────────────────────────────────────────────
 
+function showPage(page) {
+  const pages = {
+    auth: authScreen,
+    home: homeScreen,
+    editor: editorScreen,
+    game: gameDiv
+  };
+
+  Object.values(pages).forEach(el => {
+    if (el) el.style.display = 'none';
+  });
+
+  const target = pages[page];
+  if (target) target.style.display = 'flex';
+
+  sidebarButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.page === page);
+  });
+
+  currentScreen = page;
+  window.location.hash = page;
+}
+
+// Handle hash change (back/forward)
+window.addEventListener('hashchange', () => {
+  const hash = window.location.hash.slice(1) || 'home';
+  showPage(hash);
+});
+
+// Sidebar clicks
 sidebarButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    const target = btn.dataset.page;
-
-    // Hide all screens
-    [authScreen, modeSelect, homeScreen, editorScreen, gameDiv].forEach(el => {
-      if (el) el.style.display = 'none';
-    });
-
-    // Show target
-    if (target === 'home' && homeScreen) homeScreen.style.display = 'flex';
-    if (target === 'editor' && editorScreen) editorScreen.style.display = 'flex';
-    // Add more screens as needed
-
-    // Active style
-    sidebarButtons.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    const page = btn.dataset.page;
+    showPage(page);
   });
 });
+
+// Initial load
+const initialPage = window.location.hash.slice(1) || (authToken ? 'home' : 'auth');
+showPage(initialPage);
 
 // ────────────────────────────────────────────────
 // Chat
@@ -343,10 +338,7 @@ function updateInventoryUI() {
 }
 
 function updatePlayersList() {
-  if (currentMode !== 'tag' || !playersList || !playerListUl) {
-    if (playersList) playersList.style.display = 'none';
-    return;
-  }
+  if (currentMode !== 'tag' || !playersList || !playerListUl) return;
   playersList.style.display = 'block';
   playerListUl.innerHTML = '';
   Object.values(players).forEach(p => {
@@ -677,140 +669,3 @@ socket.on('chatMessage', data => {
 socket.on('playerDisconnected', id => {
   delete players[id];
 });
-
-// ────────────────────────────────────────────────
-// Inventory & player list helpers
-// ────────────────────────────────────────────────
-
-function updateInventoryUI() {
-  if (currentMode !== 'normal' || !players[myId] || !slotsDiv) {
-    if (slotsDiv) slotsDiv.innerHTML = '';
-    return;
-  }
-  slotsDiv.innerHTML = '';
-  players[myId].inventory.forEach((item, i) => {
-    const slot = document.createElement('div');
-    slot.className = 'slot';
-    if (players[myId].equipped === item) slot.classList.add('selected');
-
-    const mini = document.createElement('canvas');
-    mini.width = 48; mini.height = 48;
-    const mctx = mini.getContext('2d');
-    drawBowIcon(mctx, 24, 24, 36);
-    if (item.type === 'bow') {
-      mctx.fillStyle = 'white';
-      mctx.font = 'bold 12px Arial';
-      mctx.fillText(`${item.uses}/5`, 4, 42);
-    }
-    slot.appendChild(mini);
-
-    slot.onclick = () => socket.emit('equipItem', i);
-    slotsDiv.appendChild(slot);
-  });
-}
-
-function updatePlayersList() {
-  if (currentMode !== 'tag' || !playersList || !playerListUl) {
-    if (playersList) playersList.style.display = 'none';
-    return;
-  }
-  playersList.style.display = 'block';
-  playerListUl.innerHTML = '';
-  Object.values(players).forEach(p => {
-    if (!p.role) return;
-    const li = document.createElement('li');
-    li.textContent = `${p.name} (${p.role})`;
-    li.className = p.role === 'tagger' ? 'tagger' : 'runner';
-    playerListUl.appendChild(li);
-  });
-}
-
-// ────────────────────────────────────────────────
-// Drawing functions
-// ────────────────────────────────────────────────
-
-function drawBowIcon(ctx, cx, cy, size) {
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.scale(size / 64, size / 64);
-  ctx.fillStyle = '#8B4513';
-  ctx.fillRect(-6, -24, 12, 48);
-  ctx.fillRect(-20, -8, 40, 16);
-  ctx.strokeStyle = '#444';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(-16, -12);
-  ctx.lineTo(16, 12);
-  ctx.stroke();
-  ctx.fillStyle = '#ccc';
-  ctx.fillRect(-4, -28, 8, 8);
-  ctx.restore();
-}
-
-function drawEquipped(player) {
-  if (!player.equipped || player.equipped.type !== 'bow' || currentMode !== 'normal' || !ctx) return;
-  ctx.save();
-  ctx.translate(player.x + 25, player.y + 25);
-
-  let angle = Math.atan2(mouseY - (player.y + 25), mouseX - (player.x + 25));
-  if (Math.hypot(mouseX - (player.x + 25), mouseY - (player.y + 25)) < 30) {
-    angle = Math.atan2(lastDirection.y, lastDirection.x);
-  }
-
-  ctx.rotate(angle);
-  drawBowIcon(ctx, 0, 0, 64);
-  ctx.restore();
-}
-
-function drawName(x, y, name) {
-  if (!ctx) return;
-  ctx.save();
-  ctx.font = 'bold 14px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillStyle = 'white';
-  ctx.strokeStyle = 'black';
-  ctx.lineWidth = 3;
-  ctx.strokeText(name, x, y - 55);
-  ctx.fillText(name, x, y - 55);
-  ctx.restore();
-}
-
-function drawBubble(x, y, text, color) {
-  if (!ctx) return;
-  ctx.save();
-  ctx.font = 'bold 12px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  let displayText = text;
-  const maxWidth = 180;
-  const padding = 10;
-  while (ctx.measureText(displayText).width > maxWidth - 2 * padding && displayText.length > 3) {
-    displayText = displayText.slice(0, -1);
-  }
-  if (displayText.length < text.length) displayText += '...';
-
-  const metrics = ctx.measureText(displayText);
-  const w = Math.max(60, metrics.width + 2 * padding);
-  const h = 28;
-  const by = y - h - 12;
-
-  ctx.fillStyle = 'rgba(255,255,255,0.95)';
-  ctx.fillRect(x - w/2, by, w, h);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x - w/2, by, w, h);
-
-  ctx.beginPath();
-  ctx.moveTo(x - 6, by + h);
-  ctx.lineTo(x + 6, by + h);
-  ctx.lineTo(x, y - 4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = '#222';
-  ctx.fillText(displayText, x, by + h/2);
-  ctx.restore();
-}
