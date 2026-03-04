@@ -1,4 +1,4 @@
-// client.js - FULL FILE
+// client.js - COMPLETE FILE (login/register + persistent login + sidebar + editor + full game logic)
 
 const socket = io({ autoConnect: false });
 
@@ -16,6 +16,8 @@ const authMessage = document.getElementById('authMessage');
 const displayUsername = document.getElementById('displayUsername');
 const profileUsername = document.getElementById('profileUsername');
 const sidebarButtons = document.querySelectorAll('.sidebar button');
+
+// Game elements
 const canvas = document.getElementById('canvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 const minimap = document.getElementById('minimap');
