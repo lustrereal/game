@@ -28,7 +28,7 @@ app.use(express.static(__dirname));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
 
 // MongoDB connection
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://YOUR_USER:YOUR_PASS@cluster0.xxx.mongodb.net/squaregame?retryWrites=true&w=majority';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://29jonec5_db_user:<db_password>@msg.ba6sfeu.mongodb.net/?appName=MSG';
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
