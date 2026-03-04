@@ -8,13 +8,20 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const cors = require('cors');
 
+// ────────────────────────────────────────────────
+// Constants — moved to the VERY TOP so they are defined before use
+// ────────────────────────────────────────────────
+const WORLD_WIDTH = 3000;
+const WORLD_HEIGHT = 2000;
+
+// App & server setup
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// Trust Render's proxy (fixes X-Forwarded-For error)
+// Trust Render's proxy (fixes X-Forwarded-For / rate-limit error)
 app.set('trust proxy', 1);
 
 // Middleware
@@ -24,15 +31,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  trustProxy: true
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  trustProxy: true // Required for Render
 }));
 
 // MongoDB connection
 const MONGO_URI = process.env.MONGO_URI;
 if (!MONGO_URI) {
-  console.error('MONGO_URI not set');
+  console.error('MONGO_URI environment variable is not set!');
   process.exit(1);
 }
 
@@ -54,11 +61,13 @@ const User = mongoose.model('User', userSchema);
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  console.error('JWT_SECRET not set');
+  console.error('JWT_SECRET environment variable is not set!');
   process.exit(1);
 }
 
+// ────────────────────────────────────────────────
 // Register route
+// ────────────────────────────────────────────────
 app.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -66,7 +75,7 @@ app.post('/register', async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     const existing = await User.findOne({ username });
-    if (existing) return res.status(400).json({ error: 'Username taken' });
+    if (existing) return res.status(400).json({ error: 'Username already taken' });
 
     const hashed = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashed });
@@ -80,7 +89,9 @@ app.post('/register', async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────
 // Login route
+// ────────────────────────────────────────────────
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -98,14 +109,16 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────
 // Game state
+// ────────────────────────────────────────────────
 const players = {};
 const bows = [];
 const projectiles = [];
 let bowCounter = 0;
 let projCounter = 0;
 
-// Spawn bows for normal mode
+// Spawn bows (now safe because constants are defined above)
 for (let i = 0; i < 18; i++) {
   bows.push({
     id: bowCounter++,
